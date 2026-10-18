@@ -1,0 +1,1289 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>《一百枚金币》· 2D剧情游戏</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(circle at 50% 40%, #141428 0%, #05050a 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    overflow: hidden;
+  }
+  canvas {
+    display: block; border-radius: 12px;
+    box-shadow: 0 0 80px rgba(120,180,255,.25), 0 0 200px rgba(80,40,160,.2);
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="600"></canvas>
+<script>
+"use strict";
+
+/* ========================= 常量 & 工具 ========================= */
+const canvas = document.getElementById('game');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const WALL = 40;
+const GOAL = 100;
+const PLAYER_SPEED = 235;
+const ENERGY_DRAIN = 0.55;
+
+function rectsOverlap(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+function roundRect(c,x,y,w,h,r){
+  r = Math.min(r, w/2, h/2);
+  c.beginPath();
+  c.moveTo(x+r,y);
+  c.arcTo(x+w,y,x+w,y+h,r);
+  c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r);
+  c.arcTo(x,y,x+w,y,r);
+  c.closePath();
+}
+function pushOut(a,b){
+  const oL=(a.x+a.w)-b.x, oR=(b.x+b.w)-a.x;
+  const oT=(a.y+a.h)-b.y, oB=(b.y+b.h)-a.y;
+  const mX=Math.min(oL,oR), mY=Math.min(oT,oB);
+  if(mX<mY) a.x += (oL<oR) ? -oL-2 : oR+2;
+  else      a.y += (oT<oB) ? -oT-2 : oB+2;
+}
+
+/* ========================= 输入 ========================= */
+const keys = Object.create(null);
+let actionQueue = [];
+window.addEventListener('keydown', e=>{
+  const blocked = ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyE'];
+  if(blocked.includes(e.code)) e.preventDefault();
+  if(!keys[e.code]){
+    if(e.code==='Space'||e.code==='Enter') actionQueue.push('confirm');
+    if(e.code==='KeyE')  actionQueue.push('interact');
+    if(e.code==='KeyR')  actionQueue.push('restart');
+  }
+  keys[e.code]=true;
+});
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+/* ========================= 游戏状态 ========================= */
+const player = { x:200, y:290, w:26, h:26, dir:'right' };
+const state = {
+  mode:'play',
+  scene:'home',
+  money:0,
+  energy:100, maxEnergy:100,
+  greed:0, honest:0,
+  time:0,
+  doorCooldown:0, workCooldown:0,
+  dialog:null,
+  cutscene:null,
+  endingType:null,
+  particles:[],
+  floats:[]
+};
+function addFloat(text,x,y,color){
+  state.floats.push({text,x,y,color,life:1.6,maxLife:1.6});
+}
+
+/* ========================= 场景数据 ========================= */
+const SCENES = {
+  home:{
+    name:'🏠 家', wallColor:'#3b3550', floorColor:'#2a2438', accent:'#8b7fd4',
+    doors:[ { x:W-WALL-20, y:250, w:WALL+20, h:100,
+              to:'neighbor', spawn:{x:WALL+70,y:290}, lp:'right', label:'邻居家 ▸' } ],
+    props:[
+      { x:110,y:110,w:170,h:100,color:'#6d5a9e' },
+      { x:660,y:130,w:150,h:90, color:'#5a6d9e' },
+      { x:380,y:430,w:200,h:26, color:'#4a3f66', solid:false }
+    ],
+    interactions:[
+      { x:88,y:88,w:214,h:150, icon:'🛏️', label:'睡觉（恢复全部精力）',
+        action:()=>{
+          state.energy = state.maxEnergy;
+          addFloat('精力全满！', player.x+player.w/2, player.y-8, '#7bd7ff');
+        }
+      }
+    ],
+    npcs:[]
+  },
+
+  neighbor:{
+    name:'🏘️ 邻居家', wallColor:'#4a3f2e', floorColor:'#332b20', accent:'#e8b64c',
+    doors:[
+      { x:0,y:250,w:WALL+20,h:100, to:'home', spawn:{x:W-WALL-70,y:290}, lp:'left', label:'◂ 家' },
+      { x:W-WALL-20,y:250,w:WALL+20,h:100, to:'market', spawn:{x:WALL+70,y:290}, lp:'right', label:'市场 ▸' },
+      { x:440,y:0,w:80,h:WALL+20, to:'school', spawn:{x:470,y:H-WALL-80}, lp:'top', label:'学校 ▲' },
+      { x:440,y:H-WALL-20,w:80,h:WALL+20, to:'construction', spawn:{x:470,y:WALL+80}, lp:'bottom', label:'工地 ▼' }
+    ],
+    props:[
+      { x:700,y:440,w:160,h:80,color:'#4a3c2a' },
+      { x:120,y:130,w:120,h:70,color:'#4a3c2a' }
+    ],
+    interactions:[],
+    npcs:[
+      { name:'小女孩', x:250, y:200, w:36, h:36, color:'#ff9ec4', cooldown:0,
+        lines:[
+          '呜哇——是陌生人！',
+          '妈妈说不能跟陌生人说话……',
+          '但是……你能陪我玩一会儿吗？',
+          '哥哥说爸爸在工地很辛苦，要攒钱给我买糖吃。'
+        ]},
+      { name:'奶奶', x:250, y:290, w:36, h:36, color:'#b8b8c8', cooldown:0,
+        lines:[
+          '（奶奶眯着眼，上上下下打量你）',
+          '年轻人，钱要慢慢挣。',
+          '快钱来得急，去得也急。',
+          '……记住了吗？'
+        ]},
+      { name:'爸爸', x:640, y:200, w:36, h:36, color:'#7fb3ff', cooldown:0,
+        lines:[
+          '哎，是你啊。',
+          '我在工地干活，一天也就挣那么几个钱。',
+          '不过安全第一，我可从来不敢偷懒。',
+          '家里还有两个孩子要养呢。'
+        ]},
+      { name:'哥哥', x:640, y:290, w:36, h:36, color:'#8be28b', cooldown:0,
+        lines:[
+          '嘿！我叫小宇，今年十二岁。',
+          '我妹妹可爱吧？她最喜欢吃橘子糖了。',
+          '我在学校读书，老师说好好学以后能考大学。',
+          '你也加油啊！'
+        ]}
+    ]
+  },
+
+  market:{
+    name:'🍎 市场', wallColor:'#2e4a3f', floorColor:'#1f332b', accent:'#5fe0a0',
+    doors:[ { x:0,y:250,w:WALL+20,h:100, to:'neighbor', spawn:{x:W-WALL-70,y:290}, lp:'left', label:'◂ 邻居家' } ],
+    props:[
+      { x:160,y:150,w:200,h:120,color:'#3d6350' },
+      { x:640,y:160,w:180,h:110,color:'#3d6350' },
+      { x:380,y:430,w:220,h:26, color:'#2a4a3c', solid:false }
+    ],
+    interactions:[
+      { x:130,y:120,w:260,h:190, icon:'🍊', label:'帮摊主卖水果（诚实劳动）',
+        action:()=>doJob('market') }
+    ],
+    npcs:[]
+  },
+
+  construction:{
+    name:'🏗️ 工地', wallColor:'#4a3a2e', floorColor:'#332820', accent:'#ffa94d',
+    doors:[ { x:440,y:0,w:80,h:WALL+20, to:'neighbor', spawn:{x:470,y:H-WALL-80}, lp:'top', label:'▲ 邻居家' } ],
+    props:[
+      { x:110,y:140,w:140,h:140,color:'#5a4a3a' },
+      { x:720,y:150,w:150,h:130,color:'#5a4a3a' }
+    ],
+    interactions:[
+      { x:370,y:150,w:220,h:130, icon:'🧱', label:'搬砖（诚实劳动）',
+        action:()=>doJob('brick') },
+      { x:370,y:360,w:220,h:130, icon:'⚠️', label:'压低安全标准（快钱）',
+        action:()=>doJob('cheat_safety') }
+    ],
+    npcs:[]
+  },
+
+  school:{
+    name:'🏫 学校', wallColor:'#2e3a4a', floorColor:'#202833', accent:'#6cb8ff',
+    doors:[ { x:440,y:H-WALL-20,w:80,h:WALL+20, to:'neighbor', spawn:{x:470,y:WALL+80}, lp:'bottom', label:'▼ 邻居家' } ],
+    props:[
+      { x:120,y:150,w:150,h:110,color:'#35455c' },
+      { x:700,y:380,w:170,h:110,color:'#35455c' }
+    ],
+    interactions:[
+      { x:360,y:140,w:240,h:120, icon:'📚', label:'认真代课（诚实劳动）',
+        action:()=>doJob('teach') },
+      { x:360,y:360,w:240,h:110, icon:'🍲', label:'偷工减料（快钱）',
+        action:()=>doJob('cheat_school') }
+    ],
+    npcs:[]
+  }
+};
+
+/* ========================= 经济系统 ========================= */
+const JOBS = {
+  brick:        { energy:12, money:10, greedy:false },
+  teach:        { energy:12, money:9,  greedy:false },
+  market:       { energy:10, money:8,  greedy:false },
+  cheat_safety: { energy:6,  money:35, greedy:true  },
+  cheat_school: { energy:6,  money:35, greedy:true  }
+};
+
+function doJob(id){
+  const job = JOBS[id];
+  if(state.workCooldown > 0) return;
+  if(state.energy < job.energy){
+    addFloat('精力不够了…回家睡觉吧', player.x+player.w/2, player.y-8, '#ff6b6b');
+    return;
+  }
+  state.workCooldown = 0.45;
+  state.energy -= job.energy;
+  state.money  += job.money;
+  if(job.greedy) state.greed++; else state.honest++;
+
+  addFloat(`+${job.money} 金币   -${job.energy} 精力`,
+           player.x+player.w/2, player.y-8,
+           job.greedy ? '#ff9f43' : '#7bd7ff');
+
+  if(state.money >= GOAL) startEnding();
+}
+
+/* ========================= 对话 ========================= */
+function startDialog(lines, speaker){
+  state.mode = 'dialog';
+  state.dialog = { lines, speaker, index:0, charIndex:0, charTimer:0 };
+}
+function updateDialog(dt){
+  const d = state.dialog; if(!d) return;
+  const full = d.lines[d.index] || '';
+  if(d.charIndex < full.length){
+    d.charTimer += dt;
+    while(d.charTimer > 0.022 && d.charIndex < full.length){
+      d.charTimer -= 0.022; d.charIndex++;
+    }
+  }
+}
+function advanceDialog(){
+  const d = state.dialog; if(!d) return;
+  const full = d.lines[d.index] || '';
+  if(d.charIndex < full.length){ d.charIndex = full.length; return; }
+  d.index++; d.charIndex = 0; d.charTimer = 0;
+  if(d.index >= d.lines.length){
+    state.dialog = null;
+    state.mode = 'play';
+  }
+}
+
+/* ========================= 结局 ========================= */
+function startEnding(){
+  state.endingType = state.greed > 0 ? 'tragic' : 'happy';
+  state.mode = 'cutscene';
+  state.cutscene = { type: state.endingType, phase:0, t:0 };
+  state.particles.length = 0;
+}
+
+/* ========================= 主循环 ========================= */
+let lastTime = performance.now();
+function loop(now){
+  const dt = Math.min((now - lastTime)/1000, 0.05);
+  lastTime = now;
+  update(dt);
+  render(dt);
+  requestAnimationFrame(loop);
+}
+
+/* ========================= 更新 ========================= */
+function update(dt){
+  state.time += dt;
+  updateFloats(dt);
+  processActions();
+
+  if(state.mode === 'dialog'){ updateDialog(dt); return; }
+
+  if(state.mode === 'cutscene'){
+    const cs = state.cutscene;
+    cs.t += dt;
+    if(cs.t > 3.6){
+      cs.t = 0; cs.phase++;
+      if(cs.phase >= CUTSCENES[cs.type].length){
+        state.mode = 'victory';
+        state.time = 0;
+        initVictoryParticles();
+      }
+    }
+    return;
+  }
+
+  if(state.mode === 'victory'){ updateVictoryParticles(dt); return; }
+  if(state.mode === 'dead')   { return; }
+
+  if(state.doorCooldown > 0) state.doorCooldown -= dt;
+  if(state.workCooldown > 0) state.workCooldown -= dt;
+
+  movePlayer(dt);
+  checkDoors();
+  checkNPCs(dt);
+  updateEnergy(dt);
+}
+
+function processActions(){
+  while(actionQueue.length){
+    const a = actionQueue.shift();
+    if(a === 'restart'){ restartGame(); continue; }
+
+    if(state.mode === 'dialog' && a === 'confirm'){
+      advanceDialog();
+    } else if(state.mode === 'play' && a === 'interact'){
+      tryInteract();
+    } else if(state.mode === 'cutscene' && a === 'confirm'){
+      state.cutscene.t = 0;
+      state.cutscene.phase++;
+      if(state.cutscene.phase >= CUTSCENES[state.cutscene.type].length){
+        state.mode = 'victory';
+        state.time = 0;
+        initVictoryParticles();
+      }
+    }
+  }
+}
+
+function movePlayer(dt){
+  let dx=0, dy=0;
+  if(keys['KeyW']||keys['ArrowUp'])    dy -= 1;
+  if(keys['KeyS']||keys['ArrowDown'])  dy += 1;
+  if(keys['KeyA']||keys['ArrowLeft'])  dx -= 1;
+  if(keys['KeyD']||keys['ArrowRight']) dx += 1;
+  if(dx===0 && dy===0) return;
+
+  const len = Math.hypot(dx,dy); dx/=len; dy/=len;
+  const scene = SCENES[state.scene];
+  const step  = PLAYER_SPEED * dt;
+
+  const nx = player.x + dx*step;
+  if(isFree(nx, player.y, scene)) player.x = nx;
+  const ny = player.y + dy*step;
+  if(isFree(player.x, ny, scene)) player.y = ny;
+
+  if(Math.abs(dx) > Math.abs(dy)) player.dir = dx>0 ? 'right' : 'left';
+  else if(dy !== 0)                player.dir = dy>0 ? 'down'  : 'up';
+}
+
+function isFree(x,y,scene){
+  const r = { x, y, w:player.w, h:player.h };
+  if(r.x<WALL || r.y<WALL || r.x+r.w>W-WALL || r.y+r.h>H-WALL) return false;
+  for(const p of (scene.props||[])){
+    if(p.solid === false) continue;
+    if(rectsOverlap(r,p)) return false;
+  }
+  return true;
+}
+
+function checkDoors(){
+  if(state.doorCooldown > 0) return;
+  const scene = SCENES[state.scene];
+  for(const d of scene.doors){
+    if(rectsOverlap(player,d)){
+      state.scene = d.to;
+      player.x = d.spawn.x; player.y = d.spawn.y;
+      state.doorCooldown = 0.8;
+      return;
+    }
+  }
+}
+
+function checkNPCs(dt){
+  const scene = SCENES[state.scene];
+  for(const n of (scene.npcs||[])){
+    if(n.cooldown > 0){ n.cooldown -= dt; continue; }
+    if(rectsOverlap(player,n)){
+      n.cooldown = 3;
+      pushOut(player,n);
+      player.x = clamp(player.x, WALL+2, W-WALL-player.w-2);
+      player.y = clamp(player.y, WALL+2, H-WALL-player.h-2);
+      startDialog(n.lines, n.name);
+      return;
+    }
+  }
+}
+
+function updateEnergy(dt){
+  const moving = keys['KeyW']||keys['KeyA']||keys['KeyS']||keys['KeyD']||
+                 keys['ArrowUp']||keys['ArrowLeft']||keys['ArrowDown']||keys['ArrowRight'];
+  if(moving) state.energy -= ENERGY_DRAIN * dt;
+  if(state.energy <= 0){ state.energy = 0; state.mode = 'dead'; }
+}
+
+function getNearbyInteraction(){
+  const scene = SCENES[state.scene];
+  if(!scene.interactions) return null;
+  const px = player.x + player.w/2;
+  const py = player.y + player.h/2;
+  for(const it of scene.interactions){
+    if(px>=it.x && px<=it.x+it.w && py>=it.y && py<=it.y+it.h) return it;
+  }
+  return null;
+}
+function tryInteract(){
+  const it = getNearbyInteraction();
+  if(it && typeof it.action === 'function') it.action();
+}
+
+function updateFloats(dt){
+  for(let i=state.floats.length-1;i>=0;i--){
+    const f = state.floats[i];
+    f.life -= dt; f.y -= 42*dt;
+    if(f.life <= 0) state.floats.splice(i,1);
+  }
+}
+
+function restartGame(){
+  state.mode = 'play';
+  state.scene = 'home';
+  state.money = 0;
+  state.energy = state.maxEnergy;
+  state.greed = 0; state.honest = 0;
+  state.time = 0;
+  state.doorCooldown = 0; state.workCooldown = 0;
+  state.dialog = null; state.cutscene = null; state.endingType = null;
+  state.particles.length = 0; state.floats.length = 0;
+  player.x = 200; player.y = 290; player.dir = 'right';
+  for(const s of Object.values(SCENES))
+    for(const n of (s.npcs||[])) n.cooldown = 0;
+}
+
+/* ========================= 渲染 ========================= */
+function render(dt){
+  ctx.clearRect(0,0,W,H);
+  if(state.mode === 'cutscene'){ drawCutscene();  return; }
+  if(state.mode === 'victory'){  drawVictory();   return; }
+  if(state.mode === 'dead'){     drawDeadScreen();return; }
+
+  drawScene();
+  drawPlayerSprite();
+  drawFloats();
+  drawHUD();
+  if(state.mode === 'play')   drawInteractPrompt();
+  if(state.mode === 'dialog') drawDialogBox();
+}
+
+function drawScene(){
+  const s = SCENES[state.scene];
+  ctx.fillStyle = s.wallColor;  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = s.floorColor; ctx.fillRect(WALL,WALL,W-WALL*2,H-WALL*2);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+  ctx.lineWidth = 1;
+  for(let x=WALL;x<=W-WALL;x+=60){ ctx.beginPath(); ctx.moveTo(x,WALL); ctx.lineTo(x,H-WALL); ctx.stroke(); }
+  for(let y=WALL;y<=H-WALL;y+=60){ ctx.beginPath(); ctx.moveTo(WALL,y); ctx.lineTo(W-WALL,y); ctx.stroke(); }
+
+  for(const d of s.doors){
+    ctx.save();
+    ctx.shadowColor = s.accent; ctx.shadowBlur = 26;
+    ctx.fillStyle = s.accent;
+    ctx.fillRect(d.x,d.y,d.w,d.h);
+    ctx.restore();
+
+    ctx.font = 'bold 15px "Microsoft YaHei"';
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.textBaseline = 'middle';
+    let lx,ly,align;
+    if(d.lp==='right'){ lx=d.x-16; ly=d.y+d.h/2; align='right'; }
+    if(d.lp==='left'){  lx=d.x+d.w+16; ly=d.y+d.h/2; align='left'; }
+    if(d.lp==='top'){   lx=d.x+d.w/2; ly=d.y+d.h+20; align='center'; }
+    if(d.lp==='bottom'){lx=d.x+d.w/2; ly=d.y-20;     align='center'; }
+    ctx.textAlign = align;
+    ctx.fillText(d.label, lx, ly);
+  }
+
+  for(const p of (s.props||[])){
+    ctx.save();
+    ctx.globalAlpha = p.solid === false ? 0.55 : 1;
+    ctx.fillStyle = p.color;
+    roundRect(ctx, p.x, p.y, p.w, p.h, 10);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 2;
+    roundRect(ctx, p.x, p.y, p.w, p.h, 10);
+    ctx.stroke();
+  }
+
+  for(const it of (s.interactions||[])){
+    ctx.save();
+    ctx.setLineDash([9,7]);
+    ctx.lineDashOffset = -state.time * 22;
+    ctx.strokeStyle = 'rgba(255,215,0,0.45)';
+    ctx.lineWidth = 2;
+    roundRect(ctx, it.x, it.y, it.w, it.h, 12);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.55 + Math.sin(state.time*3)*0.15;
+    ctx.font = '34px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(it.icon||'⭐', it.x+it.w/2, it.y+it.h/2);
+    ctx.restore();
+  }
+
+  for(const n of (s.npcs||[])) drawNPCSprite(n);
+}
+
+function drawNPCSprite(n){
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(n.x+n.w/2, n.y+n.h+4, n.w*0.55, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.shadowColor = n.color; ctx.shadowBlur = 16;
+  ctx.fillStyle = n.color;
+  roundRect(ctx, n.x, n.y, n.w, n.h, 9);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(n.x+8, n.y+11, 5, 7);
+  ctx.fillRect(n.x+n.w-13, n.y+11, 5, 7);
+
+  ctx.font = 'bold 14px "Microsoft YaHei"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillText(n.name, n.x+n.w/2, n.y-6);
+}
+
+function drawPlayerSprite(){
+  const p = player;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(p.x+p.w/2, p.y+p.h+4, p.w*0.55, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.shadowColor = '#7bd7ff'; ctx.shadowBlur = 20;
+  const g = ctx.createLinearGradient(p.x, p.y, p.x, p.y+p.h);
+  g.addColorStop(0, '#9fe8ff'); g.addColorStop(1, '#4aa8e0');
+  ctx.fillStyle = g;
+  roundRect(ctx, p.x, p.y, p.w, p.h, 7);
+  ctx.fill();
+  ctx.restore();
+
+  const ex = p.dir==='left' ? 5 : p.dir==='right' ? 15 : 6;
+  ctx.fillStyle = '#0a0a12';
+  if(p.dir === 'up'){
+    ctx.fillRect(p.x+6,  p.y+7, 5, 4);
+    ctx.fillRect(p.x+15, p.y+7, 5, 4);
+  } else {
+    ctx.fillRect(p.x+ex,   p.y+9, 5, 6);
+    ctx.fillRect(p.x+ex+9, p.y+9, 5, 6);
+  }
+}
+
+function drawFloats(){
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for(const f of state.floats){
+    const a = Math.min(1, f.life / (f.maxLife*0.5));
+    ctx.globalAlpha = a;
+    ctx.font = 'bold 18px "Microsoft YaHei"';
+    ctx.fillStyle = f.color;
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 6;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD(){
+  ctx.fillStyle = 'rgba(8,8,18,0.78)';
+  roundRect(ctx, 20, 16, 400, 58, 14);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(140,180,255,0.25)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, 20, 16, 400, 58, 14);
+  ctx.stroke();
+
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 22px "Microsoft YaHei"';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`💰 ${state.money} / ${GOAL}`, 42, 45);
+
+  const bx=205, by=32, bw=190, bh=26;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  roundRect(ctx, bx, by, bw, bh, 9); ctx.fill();
+
+  const ratio = clamp(state.energy/state.maxEnergy, 0, 1);
+  const grad = ctx.createLinearGradient(bx, 0, bx+bw, 0);
+  if(ratio > 0.3){ grad.addColorStop(0,'#3ddc84'); grad.addColorStop(1,'#7bd7ff'); }
+  else           { grad.addColorStop(0,'#ff4d4d'); grad.addColorStop(1,'#ff9f43'); }
+  ctx.fillStyle = grad;
+  roundRect(ctx, bx, by, Math.max(6, bw*ratio), bh, 9); ctx.fill();
+
+  ctx.font = 'bold 15px "Microsoft YaHei"';
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  ctx.fillText(`精力 ${Math.ceil(state.energy)}`, bx+bw/2, by+bh/2+1);
+
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 22px "Microsoft YaHei"';
+  ctx.fillStyle = '#a8c6ff';
+  ctx.fillText(SCENES[state.scene].name, W-30, 45);
+
+  ctx.textAlign = 'left';
+  ctx.font = '14px "Microsoft YaHei"';
+  ctx.fillStyle = 'rgba(200,210,240,0.45)';
+  ctx.fillText('WASD 移动  ·  E 互动  ·  空格 对话  ·  R 重开', 30, H-22);
+}
+
+function drawInteractPrompt(){
+  const it = getNearbyInteraction();
+  if(!it) return;
+  const text = `[E] ${it.label}`;
+  ctx.font = 'bold 20px "Microsoft YaHei"';
+  const tw = ctx.measureText(text).width;
+  const x = W/2 - tw/2 - 20;
+  const y = H - 108;
+
+  ctx.fillStyle = 'rgba(8,8,18,0.88)';
+  roundRect(ctx, x, y, tw+40, 46, 12); ctx.fill();
+  ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
+  roundRect(ctx, x, y, tw+40, 46, 12); ctx.stroke();
+
+  ctx.fillStyle = '#ffd700';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, W/2, y+24);
+}
+
+function drawDialogBox(){
+  const d = state.dialog; if(!d) return;
+  const boxH = 176;
+  const boxY = H - boxH - 34;
+
+  ctx.fillStyle = 'rgba(6,6,16,0.94)';
+  roundRect(ctx, 60, boxY, W-120, boxH, 16); ctx.fill();
+  ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3;
+  roundRect(ctx, 60, boxY, W-120, boxH, 16); ctx.stroke();
+
+  ctx.font = 'bold 24px "Microsoft YaHei"';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(d.speaker, 96, boxY + 22);
+
+  const full  = d.lines[d.index] || '';
+  const shown = full.slice(0, d.charIndex);
+
+  ctx.font = '22px "Microsoft YaHei"';
+  ctx.fillStyle = '#e8e8f0';
+  wrapText(shown, 96, boxY + 70, W - 210, 34);
+
+  if(d.charIndex >= full.length){
+    const blink = (Math.sin(state.time*7) + 1) / 2;
+    ctx.globalAlpha = 0.35 + blink * 0.65;
+    ctx.font = 'bold 16px "Microsoft YaHei"';
+    ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('按 [空格] 继续 ▸', W - 96, boxY + boxH - 26);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight){
+  const chars = text.split('');
+  let line = '';
+  let ly = y;
+  for(let i=0;i<chars.length;i++){
+    const test = line + chars[i];
+    if(ctx.measureText(test).width > maxWidth && line !== ''){
+      ctx.fillText(line, x, ly);
+      line = chars[i];
+      ly += lineHeight;
+    } else {
+      line = test;
+    }
+  }
+  if(line) ctx.fillText(line, x, ly);
+}
+
+/* ========================= 过场 CG ========================= */
+const CUTSCENES = {
+  tragic: [
+    { caption:'工地。钢筋断裂的声音，像一声长长的叹息。',
+      sub:'爸爸被埋在了他亲手搭起的脚手架下。',
+      draw: drawCG_Collapse },
+    { caption:'学校。新盖的教学楼，墙皮像纸一样剥落。',
+      sub:'哥哥被埋在了废墟里，课本散了一地。',
+      draw: drawCG_School },
+    { caption:'小女孩站在门口，手里还攥着那颗橘子糖。',
+      sub:'她哭了很久很久。',
+      draw: drawCG_GirlCry },
+    { caption:'奶奶站在阴影里，冷冷地看着你。',
+      sub:'她什么都没说。她什么都知道了。',
+      draw: drawCG_Grandma }
+  ],
+  happy: [
+    { caption:'你诚实劳动的每一天，都变成了实实在在的砖瓦。',
+      sub:'钱不多，但每一枚都干干净净。',
+      draw: drawCG_HonestWork },
+    { caption:'市场的水果摊，学校的孩子，都认识了你。',
+      sub:'他们笑着跟你打招呼。',
+      draw: drawCG_HappyMarket },
+    { caption:'傍晚，你回到家。爸爸、哥哥、奶奶和小女孩都在。',
+      sub:'桌上有热腾腾的饭菜。',
+      draw: drawCG_HappyHome }
+  ]
+};
+
+/* --- 通用 CG 背景 --- */
+function cgBg(c1, c2){
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, c1); g.addColorStop(1, c2);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* --- 工地坍塌 --- */
+function drawCG_Collapse(){
+  cgBg('#1a1210', '#2a1a10');
+
+  // 倒塌的脚手架（斜的线条）
+  ctx.strokeStyle = '#5a4a3a';
+  ctx.lineWidth = 8;
+  for(let i=0;i<10;i++){
+    ctx.beginPath();
+    ctx.moveTo(100 + i*80, H - 100);
+    ctx.lineTo(180 + i*80, 120 + Math.sin(i)*60);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 5;
+  for(let i=0;i<6;i++){
+    ctx.beginPath();
+    ctx.moveTo(120, 150 + i*70);
+    ctx.lineTo(880, 130 + i*70);
+    ctx.stroke();
+  }
+
+  // 烟尘
+  for(let i=0;i<40;i++){
+    const t = (state.time * 0.6 + i * 0.3) % 1;
+    const px = 200 + ((i*97)%560);
+    const py = 500 - t * 420;
+    ctx.fillStyle = `rgba(180,150,120,${(1-t)*0.35})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 20 + t*70, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // 地上的安全帽
+  ctx.fillStyle = '#ffcc33';
+  ctx.beginPath();
+  ctx.ellipse(480, H-160, 36, 20, 0, Math.PI, Math.PI*2);
+  ctx.fill();
+  ctx.fillRect(444, H-160, 72, 8);
+}
+
+/* --- 学校坍塌 --- */
+function drawCG_School(){
+  cgBg('#1a1a2a', '#2a1a2a');
+
+  // 倾斜的教学楼
+  ctx.save();
+  ctx.translate(W/2, H/2 + 60);
+  ctx.rotate(-0.14);
+  ctx.fillStyle = '#2a3a4a';
+  ctx.fillRect(-320, -260, 640, 420);
+  // 窗户
+  ctx.fillStyle = '#6cb8ff';
+  for(let r=0;r<4;r++) for(let c=0;c<6;c++){
+    const lit = ((r*6+c) % 3 !== 0);
+    ctx.globalAlpha = lit ? 0.35 : 0.1;
+    ctx.fillRect(-290 + c*100, -220 + r*80, 60, 46);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // 裂缝
+  ctx.strokeStyle = '#0a0a12';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(W/2 - 80, 100);
+  ctx.lineTo(W/2 - 40, 240);
+  ctx.lineTo(W/2 - 70, 360);
+  ctx.lineTo(W/2, 500);
+  ctx.stroke();
+
+  // 散落的课本
+  for(let i=0;i<14;i++){
+    const x = 120 + (i*67)%720;
+    const y = H - 120 - ((i*41)%60);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((i%2 ? 1 : -1) * (0.2 + (i%5)*0.1));
+    ctx.fillStyle = ['#e74c3c','#3498db','#2ecc71','#f1c40f'][i%4];
+    ctx.fillRect(-22, -14, 44, 28);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillRect(-16, -8, 32, 16);
+    ctx.restore();
+  }
+}
+
+/* --- 小女孩哭泣 --- */
+function drawCG_GirlCry(){
+  cgBg('#2a1a24', '#3a1a2a');
+
+  // 门口的光
+  const g = ctx.createRadialGradient(W/2, H*0.55, 20, W/2, H*0.55, 380);
+  g.addColorStop(0, 'rgba(255,180,200,0.35)');
+  g.addColorStop(1, 'rgba(255,180,200,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  // 小女孩身体
+  const cx = W/2, cy = H*0.6;
+  ctx.fillStyle = '#ff9ec4';
+  ctx.beginPath();
+  ctx.arc(cx, cy - 60, 40, 0, Math.PI*2); // 头
+  ctx.fill();
+  ctx.fillRect(cx - 34, cy - 22, 68, 100); // 身体
+
+  // 双马尾
+  ctx.beginPath();
+  ctx.arc(cx - 44, cy - 60, 18, 0, Math.PI*2);
+  ctx.arc(cx + 44, cy - 60, 18, 0, Math.PI*2);
+  ctx.fill();
+
+  // 眼睛（闭着，哭泣）
+  ctx.strokeStyle = '#2a1a24';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx - 14, cy - 66, 8, 0.2, Math.PI - 0.2);
+  ctx.arc(cx + 14, cy - 66, 8, 0.2, Math.PI - 0.2);
+  ctx.stroke();
+
+  // 眼泪
+  for(let i=0;i<8;i++){
+    const t = (state.time * 1.2 + i * 0.25) % 1;
+    const lx = cx - 14 + (i%2)*28;
+    const ly = cy - 56 + t * 130;
+    ctx.fillStyle = `rgba(120,200,255,${1 - t})`;
+    ctx.beginPath();
+    ctx.arc(lx, ly, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // 手里的橘子糖
+  ctx.fillStyle = '#ff9933';
+  ctx.beginPath();
+  ctx.arc(cx + 52, cy + 30, 14, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath();
+  ctx.arc(cx + 48, cy + 26, 4, 0, Math.PI*2);
+  ctx.fill();
+}
+
+/* --- 奶奶冷眼 --- */
+function drawCG_Grandma(){
+  cgBg('#0a0a14', '#1a0a14');
+
+  // 一束冷光
+  const g = ctx.createRadialGradient(W/2, H*0.4, 40, W/2, H*0.4, 500);
+  g.addColorStop(0, 'rgba(120,140,180,0.25)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  const cx = W/2, cy = H*0.55;
+
+  // 奶奶剪影（灰白）
+  ctx.fillStyle = '#b8b8c8';
+  // 头
+  ctx.beginPath();
+  ctx.arc(cx, cy - 100, 52, 0, Math.PI*2);
+  ctx.fill();
+  // 身体（披肩）
+  ctx.beginPath();
+  ctx.moveTo(cx - 100, cy + 200);
+  ctx.lineTo(cx - 70, cy - 40);
+  ctx.lineTo(cx + 70, cy - 40);
+  ctx.lineTo(cx + 100, cy + 200);
+  ctx.closePath();
+  ctx.fill();
+  // 头发
+  ctx.fillStyle = '#e8e8f0';
+  ctx.beginPath();
+  ctx.arc(cx, cy - 118, 54, Math.PI, Math.PI*2);
+  ctx.fill();
+
+  // 眼镜（两片反光的白）
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillRect(cx - 34, cy - 108, 24, 14);
+  ctx.fillRect(cx + 10, cy - 108, 24, 14);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(cx - 34, cy - 108, 24, 14);
+  ctx.strokeRect(cx + 10, cy - 108, 24, 14);
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy - 101); ctx.lineTo(cx + 10, cy - 101);
+  ctx.stroke();
+
+  // 冷冽的视线
+  ctx.strokeStyle = 'rgba(180,220,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 60, cy - 90); ctx.lineTo(cx - 120, cy - 60);
+  ctx.moveTo(cx + 60, cy - 90); ctx.lineTo(cx + 120, cy - 60);
+  ctx.stroke();
+}
+
+/* --- 诚实劳动（温馨夕阳） --- */
+function drawCG_HonestWork(){
+  cgBg('#ff9a55', '#ffd28a');
+
+  // 太阳
+  ctx.fillStyle = '#fff4c2';
+  ctx.beginPath();
+  ctx.arc(W/2, H*0.55, 110, 0, Math.PI*2);
+  ctx.fill();
+
+  // 地面
+  ctx.fillStyle = 'rgba(80,50,30,0.7)';
+  ctx.fillRect(0, H*0.72, W, H*0.28);
+
+  // 搬砖的人（简化剪影）
+  const cx = W/2, cy = H*0.72;
+  ctx.fillStyle = '#3a2418';
+  // 头
+  ctx.beginPath(); ctx.arc(cx, cy - 100, 22, 0, Math.PI*2); ctx.fill();
+  // 身体
+  ctx.fillRect(cx - 22, cy - 78, 44, 78);
+  // 腿
+  ctx.fillRect(cx - 22, cy, 16, 50);
+  ctx.fillRect(cx + 6,  cy, 16, 50);
+  // 手中的砖
+  ctx.fillStyle = '#c14a2a';
+  ctx.fillRect(cx - 40, cy - 60, 24, 14);
+
+  // 空气中的金币闪光
+  for(let i=0;i<12;i++){
+    const t = (state.time*0.7 + i*0.4) % 1;
+    const x = 120 + (i*83)%720;
+    const y = H*0.3 - t * 160 + Math.sin(state.time + i)*10;
+    ctx.globalAlpha = 1 - t;
+    ctx.fillStyle = '#fff3a0';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* --- 美满的市场 --- */
+function drawCG_HappyMarket(){
+  cgBg('#a0e8ff', '#ffe8a0');
+
+  // 摊位
+  for(let i=0;i<3;i++){
+    const x = 120 + i*280;
+    ctx.fillStyle = '#c14a2a';
+    ctx.fillRect(x, 250, 220, 20);
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(x, 270, 220, 130);
+
+    // 水果
+    const cols = ['#ff5a5a','#ffb84a','#7bd7ff','#8be28b','#ff9ec4'];
+    for(let j=0;j<10;j++){
+      ctx.fillStyle = cols[(i*3+j) % cols.length];
+      ctx.beginPath();
+      ctx.arc(x + 20 + (j%5)*42, 240 - Math.floor(j/5)*22, 14, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // 两个小人（你 + 摊主）
+  ctx.fillStyle = '#3a4a6a';
+  ctx.beginPath(); ctx.arc(300, 470, 24, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(276, 490, 48, 70);
+
+  ctx.fillStyle = '#8b5a2b';
+  ctx.beginPath(); ctx.arc(660, 470, 24, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(636, 490, 48, 70);
+
+  // 握手的小气泡
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = '32px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('😊', 480, 440);
+}
+
+/* --- 幸福的家 --- */
+function drawCG_HappyHome(){
+  cgBg('#3a2a1a', '#6a4a2a');
+
+  // 房间地板
+  ctx.fillStyle = '#4a3520';
+  ctx.fillRect(0, H*0.62, W, H*0.38);
+
+  // 桌子
+  ctx.fillStyle = '#8b5a2b';
+  ctx.fillRect(300, 380, 360, 22);
+  ctx.fillRect(320, 402, 16, 80);
+  ctx.fillRect(624, 402, 16, 80);
+
+  // 桌上的饭菜
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath(); ctx.ellipse(380, 372, 40, 14, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#2ecc71';
+  ctx.beginPath(); ctx.ellipse(480, 372, 40, 14, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#f1c40f';
+  ctx.beginPath(); ctx.ellipse(580, 372, 40, 14, 0, 0, Math.PI*2); ctx.fill();
+
+  // 一家人（四个角色剪影）
+  const people = [
+    { x:200, c:'#7fb3ff' }, // 爸爸
+    { x:330, c:'#8be28b' }, // 哥哥
+    { x:620, c:'#ff9ec4' }, // 小女孩
+    { x:760, c:'#b8b8c8' }  // 奶奶
+  ];
+  for(const p of people){
+    ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(p.x, 460, 24, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(p.x-24, 480, 48, 80);
+  }
+  // 你（中间，开心）
+  ctx.fillStyle = '#9fe8ff';
+  ctx.beginPath(); ctx.arc(480, 460, 28, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(452, 484, 56, 84);
+
+  // 温暖的光
+  const g = ctx.createRadialGradient(W/2, H*0.5, 60, W/2, H*0.5, 600);
+  g.addColorStop(0, 'rgba(255,220,150,0.25)');
+  g.addColorStop(1, 'rgba(255,220,150,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+}
+
+/* --- 绘制过场 --- */
+function drawCutscene(){
+  const cs = state.cutscene;
+  const phases = CUTSCENES[cs.type];
+  const phase  = phases[Math.min(cs.phase, phases.length-1)];
+
+  // 背景 + 场景
+  phase.draw();
+
+  // 上下黑边（电影感）
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, 70);
+  ctx.fillRect(0, H-150, W, 150);
+
+  // 淡入淡出
+  const t = cs.t;
+  let alpha = 1;
+  if(t < 0.5) alpha = t / 0.5;
+  if(t > 3.1) alpha = Math.max(0, (3.6 - t) / 0.5);
+
+  ctx.globalAlpha = alpha;
+
+  // 字幕：主句
+  ctx.font = 'bold 26px "Microsoft YaHei"';
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(phase.caption, W/2, H - 105);
+
+  // 字幕：副句
+  ctx.font = '19px "Microsoft YaHei"';
+  ctx.fillStyle = 'rgba(220,220,240,0.85)';
+  ctx.fillText(phase.sub, W/2, H - 62);
+
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+
+  // 进度提示
+  ctx.font = '14px "Microsoft YaHei"';
+  ctx.fillStyle = 'rgba(255,215,0,0.5)';
+  ctx.textAlign = 'right';
+  ctx.fillText(`按 [空格] 跳过  (${cs.phase+1}/${phases.length})`, W - 30, 40);
+}
+
+/* ========================= 胜利结算 ========================= */
+function makeConfetti(anywhere){
+  return {
+    x: Math.random() * W,
+    y: anywhere ? Math.random() * H : -20,
+    vx: (Math.random() - 0.5) * 60,
+    vy: 90 + Math.random() * 260,
+    rot: Math.random() * Math.PI * 2,
+    vr: (Math.random() - 0.5) * 10,
+    size: 6 + Math.random() * 12,
+    color: ['#ffd700','#ffe66d','#ffb700','#fff3a0','#ffaa00'][Math.floor(Math.random()*5)],
+    shape: Math.random() < 0.5 ? 'rect' : 'star'
+  };
+}
+function initVictoryParticles(){
+  state.particles.length = 0;
+  for(let i=0;i<150;i++) state.particles.push(makeConfetti(true));
+}
+function updateVictoryParticles(dt){
+  for(const p of state.particles){
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rot += p.vr * dt;
+    p.vx += Math.sin(state.time*2 + p.y*0.02) * 20 * dt;
+    if(p.y > H + 30){
+      Object.assign(p, makeConfetti(false));
+    }
+  }
+}
+function drawStar(c, cx, cy, spikes, outerR, innerR){
+  let rot = -Math.PI/2;
+  const step = Math.PI / spikes;
+  c.beginPath();
+  c.moveTo(cx, cy - outerR);
+  for(let i=0;i<spikes;i++){
+    c.lineTo(cx + Math.cos(rot)*outerR, cy + Math.sin(rot)*outerR);
+    rot += step;
+    c.lineTo(cx + Math.cos(rot)*innerR, cy + Math.sin(rot)*innerR);
+    rot += step;
+  }
+  c.closePath();
+}
+function drawVictoryParticles(){
+  for(const p of state.particles){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 14;
+    if(p.shape === 'rect'){
+      ctx.fillRect(-p.size/2, -p.size/4, p.size, p.size/2);
+    } else {
+      drawStar(ctx, 0, 0, 5, p.size/2, p.size/4);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawVictory(){
+  // 底色
+  ctx.fillStyle = '#05020a';
+  ctx.fillRect(0, 0, W, H);
+
+  // 中央光晕
+  const cx = W/2, cy = 250;
+  const r = 240 + Math.sin(state.time*2)*30;
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grd.addColorStop(0, 'rgba(255,215,0,0.4)');
+  grd.addColorStop(0.5, 'rgba(255,180,0,0.15)');
+  grd.addColorStop(1, 'rgba(255,215,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,W,H);
+
+  // 粒子
+  drawVictoryParticles();
+
+  const t = state.time;
+
+  /* ---- 主标题：胜利结算 ---- */
+  const scale = 1 + Math.sin(t*3)*0.05;
+  ctx.save();
+  ctx.translate(W/2, 220);
+  ctx.scale(scale, scale);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.shadowColor = '#ffd700';
+  ctx.shadowBlur = 60;
+  ctx.font = 'bold 108px "Microsoft YaHei"';
+  const grad = ctx.createLinearGradient(0, -70, 0, 70);
+  grad.addColorStop(0, '#fffbe0');
+  grad.addColorStop(0.45, '#ffd700');
+  grad.addColorStop(1, '#a87400');
+  ctx.fillStyle = grad;
+  ctx.fillText('胜 利 结 算', 0, 0);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.strokeText('胜 利 结 算', 0, 0);
+  ctx.restore();
+
+  /* ---- 副标题：结局类型 ---- */
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 30px "Microsoft YaHei"';
+  if(state.endingType === 'happy'){
+    ctx.fillStyle = '#7bd7ff';
+    ctx.shadowColor = '#7bd7ff';
+    ctx.shadowBlur = 30;
+    ctx.fillText('✨ 美满的结局 ✨', W/2, 310);
+  } else {
+    ctx.fillStyle = '#ff5252';
+    ctx.shadowColor = '#ff5252';
+    ctx.shadowBlur = 30;
+    ctx.fillText('💀 悲剧的结局 💀', W/2, 310);
+  }
+  ctx.restore();
+
+  /* ---- 数据面板 ---- */
+  const boxY = 360;
+  ctx.fillStyle = 'rgba(10,10,20,0.85)';
+  roundRect(ctx, W/2 - 300, boxY, 600, 170, 16);
+  ctx.fill();
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 3;
+  roundRect(ctx, W/2 - 300, boxY, 600, 170, 16);
+  ctx.stroke();
+
+  ctx.font = 'bold 24px "Microsoft YaHei"';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`💰  总金币`, W/2 - 260, boxY + 40);
+  ctx.fillText(`😇  诚实劳动`, W/2 - 260, boxY + 85);
+  ctx.fillText(`😈  快钱次数`, W/2 - 260, boxY + 130);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`${state.money}`, W/2 + 260, boxY + 40);
+  ctx.fillStyle = '#7bd7ff';
+  ctx.fillText(`${state.honest} 次`, W/2 + 260, boxY + 85);
+  ctx.fillStyle = '#ff5252';
+  ctx.fillText(`${state.greed} 次`, W/2 + 260, boxY + 130);
+
+  /* ---- 底部提示 ---- */
+  const blink = (Math.sin(t*4) + 1) / 2;
+  ctx.globalAlpha = 0.5 + blink * 0.5;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px "Microsoft YaHei"';
+  ctx.fillStyle = '#ffd700';
+  ctx.shadowColor = '#ffd700';
+  ctx.shadowBlur = 20;
+  ctx.fillText('按 [R] 重新开始', W/2, H - 45);
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
+/* ========================= 死亡画面 ========================= */
+function drawDeadScreen(){
+  ctx.fillStyle = '#0a0000';
+  ctx.fillRect(0, 0, W, H);
+
+  // 红色暗光
+  const g = ctx.createRadialGradient(W/2, H/2, 60, W/2, H/2, 500);
+  g.addColorStop(0, 'rgba(120,0,0,0.5)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = 'bold 90px "Microsoft YaHei"';
+  ctx.fillStyle = '#c0392b';
+  ctx.shadowColor = '#ff0000';
+  ctx.shadowBlur = 40;
+  ctx.fillText('精 尽 人 亡', W/2, H/2 - 60);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '22px "Microsoft YaHei"';
+  ctx.fillStyle = 'rgba(220,200,200,0.7)';
+  ctx.fillText('你倒在了半路上。', W/2, H/2 + 30);
+  ctx.fillText('下次记得回家睡一觉。', W/2, H/2 + 66);
+
+  const blink = (Math.sin(state.time*4) + 1) / 2;
+  ctx.globalAlpha = 0.5 + blink * 0.5;
+  ctx.font = 'bold 22px "Microsoft YaHei"';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText('按 [R] 重新开始', W/2, H - 80);
+  ctx.globalAlpha = 1;
+}
+
+/* ========================= 启动 ========================= */
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
