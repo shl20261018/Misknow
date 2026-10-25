@@ -1,0 +1,3964 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>《一百枚金币》· v2</title>
+<style>
+html,body{margin:0;padding:0;height:100%;background:radial-gradient(circle at 50% 40%,#141428 0%,#05050a 100%);
+display:flex;align-items:center;justify-content:center;font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+canvas{display:block;border-radius:12px;box-shadow:0 0 80px rgba(120,180,255,.25),0 0 200px rgba(80,40,160,.2);touch-action:none}
+#gameWrap{position:relative;display:flex;align-items:center;justify-content:center}
+#chatInput{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  width:60%;max-width:560px;height:40px;padding:0 12px;
+  background:rgba(20,24,44,0.92);color:#e8e8f0;border:2px solid rgba(150,200,255,0.5);
+  border-radius:10px;font-size:16px;font-family:"Microsoft YaHei",sans-serif;
+  outline:none;box-shadow:0 0 12px rgba(120,180,255,0.3);
+  visibility:hidden;opacity:0;transition:opacity .2s;
+}
+#chatInput.visible{visibility:visible;opacity:1}
+#chatInput::placeholder{color:rgba(200,220,255,0.5)}
+#chatInput:focus{border-color:#a8c6ff;box-shadow:0 0 18px rgba(168,198,255,0.5)}
+/* ===== 开局：角色创建 + 是否接入云端大模型 ===== */
+#startScreen{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+  padding:20px;box-sizing:border-box;overflow:auto;
+  background:radial-gradient(circle at 50% 35%,#1a1a33 0%,#05050a 100%)}
+#startScreen.hidden{display:none}
+.startCard{width:min(520px,100%);background:rgba(14,16,30,0.96);border:2px solid rgba(150,200,255,0.4);
+  border-radius:18px;padding:26px 24px;box-shadow:0 0 60px rgba(120,180,255,0.25)}
+.startCard h1{margin:0 0 8px;font-size:26px;color:#ffd700;text-align:center}
+.startCard .sub{margin:0 0 14px;font-size:13px;color:rgba(200,210,240,0.55);text-align:center;line-height:1.7}
+.startLabel{ display:block;font-size:14px;color:#a8c6ff;margin:16px 0 8px}
+.startCard input[type=text]{width:100%;box-sizing:border-box;height:42px;padding:0 12px;border-radius:10px;
+  background:rgba(20,24,44,0.95);color:#e8e8f0;border:2px solid rgba(150,200,255,0.35);
+  font-size:15px;font-family:inherit;outline:none}
+.startCard input[type=text]:focus{border-color:#a8c6ff}
+.seg{display:flex;gap:10px}
+.seg button{flex:1;height:44px;border-radius:10px;background:rgba(20,24,44,0.95);color:#c8d4f0;
+  border:2px solid rgba(150,200,255,0.3);font-size:15px;font-family:inherit;cursor:pointer}
+.seg button.on{background:linear-gradient(180deg,#3a6fd8,#2a4fa8);color:#fff;
+  border-color:#a8c6ff;box-shadow:0 0 16px rgba(120,180,255,0.45)}
+#cloudFields{display:none}
+#cloudFields.show{display:block}
+#modelSeg{margin:6px 0 8px;flex-wrap:wrap}
+#modelSeg button{height:40px;font-size:14px}
+#testBtn{width:100%;height:44px;margin-top:12px;border-radius:10px;cursor:pointer;font-family:inherit;
+  font-size:15px;color:#cfe3ff;background:rgba(40,80,140,0.55);border:1px solid rgba(120,180,255,0.5)}
+#testBtn:hover{background:rgba(60,110,190,0.65)}
+#testBtn:disabled{opacity:0.55;cursor:default}
+#testResult{display:none;margin-top:10px;padding:9px 11px;border-radius:9px;font-size:13px;
+  line-height:1.6;text-align:left;white-space:pre-wrap;word-break:break-all}
+#testResult.show{display:block}
+#testResult.ok{background:rgba(60,200,120,0.14);color:#7ee2a8;border:1px solid rgba(60,200,120,0.45)}
+#testResult.bad{background:rgba(255,90,90,0.13);color:#ff9a9a;border:1px solid rgba(255,90,90,0.45)}
+#testResult.wait{background:rgba(120,160,255,0.12);color:#a8c6ff;border:1px solid rgba(120,160,255,0.4)}
+#startBtn{width:100%;height:50px;margin-top:24px;border:none;border-radius:12px;cursor:pointer;
+  background:linear-gradient(180deg,#ffd95e,#f0a800);color:#2a1e00;font-size:18px;font-weight:bold;
+  font-family:inherit;box-shadow:0 4px 0 #a87a00}
+#startBtn:active{transform:translateY(2px);box-shadow:0 2px 0 #a87a00}
+.tip{margin:14px 0 0;font-size:12px;color:rgba(200,210,240,0.42);text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+<canvas id="game" width="960" height="600"></canvas>
+<input id="chatInput" type="text" maxlength="80" enterkeyhint="send" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="打字自由对话，回车发送；也可按数字键选选项">
+<div id="startScreen">
+  <div class="startCard">
+    <h1>💰 一百枚金币</h1>
+    <p class="sub">学校正在建设，钱得靠一张嘴慢慢挣。<br>先给自己起个名字、选个性别吧。</p>
+    <label class="startLabel">你的名字（最多 8 个字）</label>
+    <input id="pname" type="text" maxlength="8" placeholder="例如：小满" autocomplete="off" spellcheck="false">
+    <label class="startLabel">性别（影响 NPC 对你的称呼）</label>
+    <div class="seg" id="genderSeg">
+      <button type="button" data-g="male" class="on">👦 男孩</button>
+      <button type="button" data-g="female">👧 女孩</button>
+    </div>
+    <label class="startLabel">NPC 对话用哪个大模型？</label>
+    <div class="seg" id="cloudSeg">
+      <button type="button" data-c="no" class="on">💻 本地模型</button>
+      <button type="button" data-c="yes">☁️ 云端 API</button>
+    </div>
+    <div id="cloudFields">
+      <label class="startLabel">Base URL（OpenAI 兼容）</label>
+      <input id="cBase" type="text" value="https://api.deepseek.com/v1" placeholder="https://api.deepseek.com/v1" autocomplete="off" spellcheck="false">
+      <label class="startLabel">API Key</label>
+      <input id="cKey" type="text" placeholder="sk-..." autocomplete="off" spellcheck="false">
+      <label class="startLabel">模型名（点按钮快速填入，也可以自己改）</label>
+      <div class="seg" id="modelSeg">
+        <button type="button" data-m="deepseek-chat" class="on">DeepSeek Chat</button>
+        <button type="button" data-m="deepseek-reasoner">DeepSeek R1</button>
+        <button type="button" data-m="deepseek-flash">DeepSeek V4.1 Flash</button>
+      </div>
+      <input id="cModel" type="text" value="deepseek-chat" placeholder="deepseek-flash / deepseek-chat / deepseek-reasoner / qwen-plus / gpt-4o-mini" autocomplete="off" spellcheck="false">
+      <button type="button" id="testBtn">🔌 测试云端连接</button>
+      <div id="testResult"></div>
+    </div>
+    <button type="button" id="startBtn">开始游戏 ▶</button>
+    <p class="tip">选「本地模型」需要本机已装 Ollama；选「云端」的信息只保存在你本机浏览器、只发给你填的那个服务。<br>
+      Base URL 要填「接口根地址」：DeepSeek 用 <b>https://api.deepseek.com/v1</b>，OpenAI 用 <b>https://api.openai.com/v1</b>，通义用 <b>https://dashscope.aliyuncs.com/compatible-mode/v1</b>。<br>
+      只填到域名（如 https://api.deepseek.com）也可以，程序会自动补 /v1。连不上时按 F12 看控制台 [API] 日志。</p>
+  </div>
+</div>
+</div>
+<script>
+"use strict";
+
+/* ============ §1 工具 ============ */
+var canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+var W=canvas.width,H=canvas.height;
+var WALL=40,GOAL=100000,PLAYER_SPEED=235,ENERGY_DRAIN=0.55;
+// 启动资金：没有打工之后，玩家得靠这笔本钱从市场进货、再卖出去赚差价
+var START_MONEY=5000;
+// 商品显示名（前端本地兜底用，服务端也有一份）
+var _GOOD_NAMES={brick:'砖头',cement:'水泥',helmet:'安全帽',candy:'橘子糖',
+  scaffold:'手脚架',cigarette:'香烟',wine:'白酒'};
+
+// 自由对话输入框
+var chatInput=document.getElementById('chatInput');
+function showChatInput(){chatInput.classList.add('visible');chatInput.focus();if(typeof _fitChatInput==='function')_fitChatInput()}
+function hideChatInput(){chatInput.classList.remove('visible');chatInput.blur();chatInput.value=''}
+function isChatFocused(){return document.activeElement===chatInput}
+var _chatEscaped=false;
+chatInput.addEventListener('keydown',function(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    var txt=chatInput.value.trim();
+    if(txt&&state.dialog&&state.dialog.npc){
+      sendFreeInput(txt);
+      chatInput.value='';
+    }
+  }else if(e.code==='Escape'){
+    _chatEscaped=true;
+  }
+  // 阻止游戏键盘监听在输入时触发（Enter 除外，已在上面处理）
+  e.stopPropagation();
+});
+chatInput.addEventListener('blur',function(){
+  // Esc 主动退出 → 不自动聚焦；其他情况 dialog 还在就重新聚焦
+  if(!_chatEscaped&&state.dialog&&state.mode==='dialog'){chatInput.focus()}
+  _chatEscaped=false;
+});
+// 移动端：软键盘弹出时把输入框顶到键盘上方，避免被挡住
+function _fitChatInput(){
+  if(!window.visualViewport)return;
+  var vv=window.visualViewport;
+  var overlap=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);
+  chatInput.style.bottom=(12+overlap)+'px';
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',_fitChatInput);
+  window.visualViewport.addEventListener('scroll',_fitChatInput);
+}
+// 玩家说这类话 → 兜底直接收尾（防止模型漏判）
+var FAREWELL=/拜拜|再见|走了|告辞|回见|下次聊|以后再聊|886|晚安|不聊了|先走|得走了/;
+function sendFreeInput(text){
+  var d=state.dialog;if(!d||!d.npc)return;
+  var npc=d.npc;
+  state.shop=null;   // 一旦玩家自己打字，就退出商店选单
+  // 砍价模式：玩家输入的是数字 → 作为出价发给服务端裁定
+  if(state.haggleMode&&state.trade){
+    var num=parseInt(text,10);
+    if(!isNaN(num)&&num>0){
+      state.haggleMode=false;
+      var offerTrade={direction:state.trade.direction,item:state.trade.item,
+        qty:state.trade.qty,stage:'offer',offer:num};
+      npc.history.push({role:'player',text:'我出 '+num+' 金币'});
+      npc.history=npc.history.slice(-8);
+      d.forceEnd=false;
+      sendDialogTurn(npc,text,offerTrade);
+      return;
+    }
+  }
+  npc.history.push({role:'player',text:text});
+  npc.history=npc.history.slice(-8);
+  d.forceEnd=FAREWELL.test(text);
+  state.haggleMode=false;
+  sendDialogTurn(npc,text,null);
+}
+function sendDialogTurn(npc,text,trade){
+  var d=state.dialog;
+  d.round++;d.options=null;d.optionRects=[];d.waitingForAI=true;
+  // 玩家刚说完这句：说话方切成玩家——左侧立绘全亮，台词行打出「你」和这句话，好感度条暂时隐藏
+  d.speaker='你';d.playerSpeaking=true;
+  d.lines=[text];d.index=0;d.charIndex=0;d.charTimer=0;
+  showChatInput();
+  requestAIResponse(npc,text,trade);
+}
+
+function rectOverlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function lerp(a,b,t){return a+(b-a)*t}
+function expLerp(a,b,r,dt){return lerp(a,b,1-Math.exp(-r*dt))}
+function roundRect(c,x,y,w,h,r){
+  r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
+  if(w<0){x+=w;w=-w}if(h<0){y+=h;h=-h}
+  c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();
+}
+function pushOut(a,b){
+  var oL=(a.x+a.w)-b.x,oR=(b.x+b.w)-a.x,oT=(a.y+a.h)-b.y,oB=(b.y+b.h)-a.y;
+  var mX=Math.min(oL,oR),mY=Math.min(oT,oB);
+  if(mX<mY)a.x+=(oL<oR)?-oL-2:oR+2;else a.y+=(oT<oB)?-oT-2:oB+2;
+}
+function drawStar(c,cx,cy,spikes,outer,inner){
+  var rot=-Math.PI/2,step=Math.PI/spikes;
+  c.beginPath();c.moveTo(cx,cy-outer);
+  for(var i=0;i<spikes;i++){
+    c.lineTo(cx+Math.cos(rot)*outer,cy+Math.sin(rot)*outer);rot+=step;
+    c.lineTo(cx+Math.cos(rot)*inner,cy+Math.sin(rot)*inner);rot+=step;
+  }c.closePath();
+}
+var Ease={
+  linear:function(t){return t},
+  inQuad:function(t){return t*t},
+  outQuad:function(t){return t*(2-t)},
+  inOutQuad:function(t){return t<0.5?2*t*t:-1+(4-2*t)*t},
+  outCubic:function(t){return 1-Math.pow(1-t,3)},
+  inOutSine:function(t){return -(Math.cos(Math.PI*t)-1)/2},
+  outBack:function(t){var c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2)}
+};
+
+/* ============ §2 自适应 ============ */
+function resizeCanvas(){
+  var aspect=W/H,cw=window.innerWidth,ch=window.innerHeight;
+  if(cw/ch>aspect)cw=ch*aspect;else ch=cw/aspect;
+  canvas.style.width=cw+'px';canvas.style.height=ch+'px';
+}
+window.addEventListener('resize',resizeCanvas);
+window.addEventListener('orientationchange',function(){setTimeout(resizeCanvas,120)});
+resizeCanvas();
+function getCanvasPos(cx,cy){
+  var r=canvas.getBoundingClientRect();
+  return {x:(cx-r.left)*(W/r.width),y:(cy-r.top)*(H/r.height)};
+}
+
+/* ============ §3 输入 ============ */
+var keys=Object.create(null),actionQueue=[],isTouch=false;
+// 开发者工具总开关：默认关闭。用带 ?dev=1 的地址打开过一次，就会在这个浏览器里永久启用。
+// 目的：给玩家玩的那一份里 C/G/P/O/Z/X 全部无效，乱按也不会出现任何调试画面。
+var DEV_UNLOCKED=(function(){
+  try{
+    if(/[?&]dev=1/.test(location.search)){localStorage.setItem('yzjb_dev','1');return true}
+    return localStorage.getItem('yzjb_dev')==='1';
+  }catch(e){return false}
+})();
+window.addEventListener('keydown',function(e){
+  // 开局角色创建阶段：键盘交给 DOM 表单，不走游戏输入
+  if(!gameStarted&&state.mode==='intro')return;
+  // 输入框聚焦时：只放行 数字选项、Esc、Tab；其他键跳过
+  if(isChatFocused()){
+    var isDigit=/^Digit[1-6]$|^Numpad[1-6]$/.test(e.code);
+    if(!isDigit&&e.code!=='Escape'&&e.code!=='Tab')return;
+    if(e.code==='Escape'){e.preventDefault();_chatEscaped=true;chatInput.blur();return}
+  }
+  // F 键：与身上重叠的 NPC 交谈（重叠时才提示；谈不谈由玩家决定，不会自动弹对话）
+  if(e.code==='KeyF'){e.preventDefault();tryTalk();return}
+  // M 键：背景音乐静音/恢复（在上方的输入框判断之后，所以在聊天里打 m 不会误触发）
+  if(e.code==='KeyM'){e.preventDefault();toggleBGM();return}
+  // G 键：碰撞可视化开关；P 键：把碰撞盒清单打印到控制台（同样在输入框判断之后，聊天里打字不会误触发）
+  // 下面这一整组都是"开发者工具"，默认锁死（见 DEV_UNLOCKED）：
+  // 只有用带 ?dev=1 的地址打开过一次（会记在这个浏览器里），这些键才会生效。
+  if(DEV_UNLOCKED){
+    if(e.code==='KeyG'){e.preventDefault();debugColliders=!debugColliders;return}
+    if(e.code==='KeyP'){e.preventDefault();printColliderList();return}
+    // C 键：碰撞标记模式（自己拖鼠标在图上画框）；Z 撤销上一个；X 连按两次清空全部
+    if(e.code==='KeyC'){e.preventDefault();toggleMarkMode();return}
+    if(e.code==='KeyZ'){e.preventDefault();undoMark();return}
+    if(e.code==='KeyX'){e.preventDefault();clearMarks();return}
+    // O 键：从 marks.json 重新载入标记（外面改了 marks.json 后，按一下就能刷新画面上的粉框）
+    if(e.code==='KeyO'){e.preventDefault();reloadMarksFromFile();return}
+  }
+  // 背包弹窗：B 开关，Esc 关闭，1 吃一颗橘子糖
+  if(state.showBag){
+    if(e.code==='KeyB'||e.code==='Escape'||e.code==='Digit1'||e.code==='Numpad1'){
+      e.preventDefault();
+      if(e.code==='Digit1'||e.code==='Numpad1')eatCandy();else state.showBag=false;
+    }
+    return;
+  }
+  if(e.code==='KeyB'){e.preventDefault();state.showBag=true;return}
+  // 对话中 Esc 直接关掉对话
+  if(e.code==='Escape'&&state.mode==='dialog'){e.preventDefault();closeDialog();return}
+  var blk=['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyE'];
+  if(blk.indexOf(e.code)>=0)e.preventDefault();
+  if(!keys[e.code]){
+    if(e.code==='Space'||e.code==='Enter')actionQueue.push('confirm');
+    if(e.code==='KeyE')actionQueue.push('interact');
+    if(e.code==='KeyR')actionQueue.push('restart');
+    var m=/^(Digit|Numpad)([1-6])$/.exec(e.code);
+    if(m)actionQueue.push('opt'+(parseInt(m[2],10)-1));
+  }
+  keys[e.code]=true;
+});
+window.addEventListener('keyup',function(e){keys[e.code]=false});
+
+var JOY_MAX=62;
+var BTN_E={cx:W-82,cy:H-92,r:48};
+var BTN_SPACE={cx:W-192,cy:H-134,r:40};
+var touchState={joystick:{active:false,id:null,ox:0,oy:0,dx:0,dy:0}};
+var _lastTouchTs=0;
+function hitCircle(p,c){return Math.hypot(p.x-c.cx,p.y-c.cy)<=c.r}
+// 取当前对话的选项矩形；万一这一帧还没算好（掉帧/切后台），这里现算一次，保证点得中
+function tapOptionRects(){
+  var d=state.dialog;
+  var rects=(d&&d.optionRects)||[];
+  if(!rects.length&&d&&d.options&&d.options.length&&d.charIndex>=(d.lines[d.index]||'').length){
+    rects=computeOptionRects(d.options.length);d.optionRects=rects;
+  }
+  return rects;
+}
+
+function handleTouchStart(id,pos){
+  isTouch=true;
+  // 每日剧情播放中（mode 仍是 play，靠 state.story 标记）：点一下推进一句
+  if(state.story){actionQueue.push('confirm');return}
+  var m=state.mode;
+  if(m==='dialog'){
+    var rects=tapOptionRects();
+    for(var i=0;i<rects.length;i++){
+      var r=rects[i];
+      if(pos.x>=r.x&&pos.x<=r.x+r.w&&pos.y>=r.y&&pos.y<=r.y+r.h){chooseOption(r.idx);return}
+    }
+    actionQueue.push('confirm');return;
+  }
+  if(m==='cutscene'){actionQueue.push('confirm');return}
+  if(m==='victory'||m==='dead'){actionQueue.push('restart');return}
+  if(hitCircle(pos,BTN_E)){actionQueue.push('interact');return}
+  if(hitCircle(pos,BTN_SPACE)){actionQueue.push('confirm');return}
+  if(pos.x<W*0.58&&pos.y>H*0.42){
+    var j=touchState.joystick;
+    j.active=true;j.id=id;j.ox=pos.x;j.oy=pos.y;j.dx=0;j.dy=0;
+  }
+}
+function handleTouchMove(id,pos){
+  var j=touchState.joystick;
+  if(!j.active||j.id!==id)return;
+  var dx=pos.x-j.ox,dy=pos.y-j.oy,d=Math.hypot(dx,dy);
+  if(d<0.001){j.dx=0;j.dy=0;return}
+  var r=Math.min(d,JOY_MAX);
+  j.dx=(dx/d)*(r/JOY_MAX);j.dy=(dy/d)*(r/JOY_MAX);
+}
+function handleTouchEnd(id){
+  var j=touchState.joystick;
+  if(j.active&&j.id===id){j.active=false;j.id=null;j.dx=0;j.dy=0}
+}
+canvas.addEventListener('touchstart',function(e){
+  _lastTouchTs=Date.now();
+  e.preventDefault();
+  for(var i=0;i<e.changedTouches.length;i++){
+    var t=e.changedTouches[i];handleTouchStart(t.identifier,getCanvasPos(t.clientX,t.clientY));
+  }
+},{passive:false});
+canvas.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  for(var i=0;i<e.changedTouches.length;i++){
+    var t=e.changedTouches[i];handleTouchMove(t.identifier,getCanvasPos(t.clientX,t.clientY));
+  }
+},{passive:false});
+canvas.addEventListener('touchend',function(e){
+  e.preventDefault();
+  for(var i=0;i<e.changedTouches.length;i++)handleTouchEnd(e.changedTouches[i].identifier);
+},{passive:false});
+canvas.addEventListener('touchcancel',function(e){
+  e.preventDefault();
+  for(var i=0;i<e.changedTouches.length;i++)handleTouchEnd(e.changedTouches[i].identifier);
+},{passive:false});
+
+// ---- PC 鼠标支持：点击选项 / 推进对话 / 关闭背包 ----
+function handleMouseDown(pos){
+  if(state.showBag){state.showBag=false;return}
+  // 每日剧情播放中（mode 仍是 play，靠 state.story 标记）：点一下推进一句，和空格/回车等效
+  if(state.story){actionQueue.push('confirm');return}
+  var m=state.mode;
+  if(m==='dialog'){
+    var rects=tapOptionRects();
+    for(var i=0;i<rects.length;i++){
+      var r=rects[i];
+      if(pos.x>=r.x&&pos.x<=r.x+r.w&&pos.y>=r.y&&pos.y<=r.y+r.h){chooseOption(r.idx);return}
+    }
+    actionQueue.push('confirm');return;
+  }
+  if(m==='cutscene'){actionQueue.push('confirm');return}
+  if(m==='victory'||m==='dead'){actionQueue.push('restart');return}
+}
+canvas.addEventListener('mousedown',function(e){
+  if(Date.now()-_lastTouchTs<700)return;   // 触屏设备会补发鼠标事件，这里去重
+  e.preventDefault();
+  handleMouseDown(getCanvasPos(e.clientX,e.clientY));
+});
+canvas.addEventListener('contextmenu',function(e){e.preventDefault()});
+// 鼠标悬停在选项上时显示手型光标
+canvas.addEventListener('mousemove',function(e){
+  var pos=getCanvasPos(e.clientX,e.clientY),over=false;
+  if(state.mode==='dialog'){
+    var rects=tapOptionRects();
+    for(var i=0;i<rects.length;i++){
+      var r=rects[i];
+      if(pos.x>=r.x&&pos.x<=r.x+r.w&&pos.y>=r.y&&pos.y<=r.y+r.h){over=true;break}
+    }
+  }
+  canvas.style.cursor=over?'pointer':'default';
+});
+
+/* ============ §4 Camera ============ */
+var camera={
+  shakeAmp:0,shakeDecay:8,zoom:1,x:0,y:0,
+  update:function(dt){
+    if(this.shakeAmp>0){
+      this.shakeAmp*=Math.exp(-this.shakeDecay*dt);
+      if(this.shakeAmp<0.15)this.shakeAmp=0;
+    }
+    // 大地图：镜头跟随玩家；一屏场景（x/y 目标恒为 0）无滚动
+    var s=SCENES[state.scene]||{};
+    var ww=s.worldW||W,hh=s.worldH||H;
+    var tx=(ww<=W)?0:clamp(player.x+player.w/2-W/2,0,ww-W);
+    var ty=(hh<=H)?0:clamp(player.y+player.h/2-H/2,0,hh-H);
+    this.x=expLerp(this.x,tx,10,dt);
+    this.y=expLerp(this.y,ty,10,dt);
+  },
+  snap:function(){
+    var s=SCENES[state.scene]||{};
+    var ww=s.worldW||W,hh=s.worldH||H;
+    this.x=(ww<=W)?0:clamp(player.x+player.w/2-W/2,0,ww-W);
+    this.y=(hh<=H)?0:clamp(player.y+player.h/2-H/2,0,hh-H);
+  },
+  shake:function(a){this.shakeAmp=Math.max(this.shakeAmp,a)},
+  begin:function(){
+    ctx.save();
+    if(this.shakeAmp>0)ctx.translate((Math.random()-0.5)*this.shakeAmp*2,(Math.random()-0.5)*this.shakeAmp*2);
+    if(this.x||this.y)ctx.translate(-this.x,-this.y);
+    if(this.zoom!==1){ctx.translate(W/2,H/2);ctx.scale(this.zoom,this.zoom);ctx.translate(-W/2,-H/2)}
+  },
+  end:function(){ctx.restore()}
+};
+
+/* ============ §5 动画管理 ============ */
+var anim={
+  tweens:[],
+  tween:function(o){
+    this.tweens.push({
+      from:o.from,to:o.to,dur:Math.max(0.0001,o.dur||0.3),
+      elapsed:0,delay:o.delay||0,ease:o.ease||Ease.linear,
+      onUpdate:o.onUpdate,onDone:o.onDone
+    });
+  },
+  update:function(dt){
+    for(var i=this.tweens.length-1;i>=0;i--){
+      var t=this.tweens[i];
+      if(t.delay>0){t.delay-=dt;continue}
+      t.elapsed+=dt;
+      var p=Math.min(1,t.elapsed/t.dur);
+      var v=t.from+(t.to-t.from)*t.ease(p);
+      if(t.onUpdate)t.onUpdate(v,p);
+      if(p>=1){if(t.onDone)t.onDone();this.tweens.splice(i,1)}
+    }
+  },
+  clear:function(){this.tweens.length=0}
+};
+
+/* ============ §6 粒子 ============ */
+var particles={
+  pool:[],
+  init:function(max){for(var i=0;i<max;i++)this.pool.push({active:false})},
+  emit:function(o){
+    for(var i=0;i<this.pool.length;i++){
+      var p=this.pool[i];if(p.active)continue;
+      p.active=true;
+      p.x=o.x;p.y=o.y;p.vx=o.vx||0;p.vy=o.vy||0;
+      p.life=o.life||0.6;p.maxLife=p.life;
+      p.size=o.size||4;p.color=o.color||'#fff';
+      p.shape=o.shape||'circle';p.gravity=o.gravity||0;p.drag=o.drag||0;
+      p.blend=o.blend||'source-over';
+      p.rot=Math.random()*6.283;p.vr=(Math.random()-0.5)*6;
+      return p;
+    }return null;
+  },
+  emitMany:function(n,fn){for(var i=0;i<n;i++){var o=fn(i);if(o)this.emit(o)}},
+  update:function(dt){
+    for(var i=0;i<this.pool.length;i++){
+      var p=this.pool[i];if(!p.active)continue;
+      p.life-=dt;if(p.life<=0){p.active=false;continue}
+      p.vy+=p.gravity*dt;
+      if(p.drag){var f=Math.exp(-p.drag*dt);p.vx*=f;p.vy*=f}
+      p.x+=p.vx*dt;p.y+=p.vy*dt;p.rot+=p.vr*dt;
+    }
+  },
+  draw:function(c){
+    for(var i=0;i<this.pool.length;i++){
+      var p=this.pool[i];if(!p.active)continue;
+      var a=clamp(p.life/p.maxLife,0,1);
+      c.save();c.globalAlpha=a;c.globalCompositeOperation=p.blend;c.translate(p.x,p.y);
+      if(p.shape==='circle'){
+        c.fillStyle=p.color;c.beginPath();c.arc(0,0,p.size*(0.4+a*0.6),0,6.283);c.fill();
+      }else if(p.shape==='star'){
+        c.fillStyle=p.color;c.rotate(p.rot);drawStar(c,0,0,5,p.size,p.size*0.45);c.fill();
+      }else if(p.shape==='rect'){
+        c.fillStyle=p.color;c.rotate(p.rot);c.fillRect(-p.size/2,-p.size/4,p.size,p.size/2);
+      }c.restore();
+    }
+  },
+  clear:function(){for(var i=0;i<this.pool.length;i++)this.pool[i].active=false}
+};
+particles.init(512);
+
+/* ============ §7 场景数据（出生点已全部修正） ============ */
+var SCENES={
+  /* ===== 大地图：家（PNG 室内）+ 院子 + 邻居家，一张图直接走过去 ===== */
+  world:{
+    name:'🏡 院子',wallColor:'#2f5a2c',floorColor:'#3d7c30',accent:'#8fe08f',
+    isWorld:true,worldW:1810,worldH:1400,bg:16,
+    // 大地图 = 五张场景贴图拼在同一张世界画布上（不再是各自独立场景 + 传送阵）
+    // 每项 {src 贴图, x/y/w/h 贴在世界画布上的位置与尺寸}
+    worldImages:[
+      {src:'scenes/home.png',         x:60,  y:60,  w:640,h:640},   // 家
+      {src:'scenes/neighbor.png',     x:960, y:190, w:512,h:512},   // 邻居家
+      {src:'scenes/market.png',       x:120, y:850, w:512,h:512},   // 市场
+      {src:'scenes/construction.png', x:680, y:850, w:512,h:512},   // 工地
+      {src:'scenes/school.png',       x:1240,y:850, w:512,h:512}    // 学校
+    ],
+    doors:[],   // 传送阵已全部拆掉：市场/工地/学校现在就在同一张地图上，走过去即可
+    // 全部 317 条不可见碰撞盒，由玩家在游戏内「标记模式」（C 键）亲手画框标出，
+    // 这里只是把 marks.json 的内容原样搬过来（除玩家口头指名增删/微调的几处外，坐标未改）。
+    colliders:[
+      // ---- 家 62 条（玩家在标记模式里画的原框）----
+      {x:162,y:121,w:8,h:210},
+      {x:164,y:121,w:249,h:15},
+      {x:399,y:138,w:5,h:249},
+      {x:161,y:394,w:13,h:227},
+      {x:174,y:602,w:176,h:19},
+      {x:346,y:513,w:4,h:97},
+      {x:346,y:424,w:6,h:55},
+      {x:177,y:425,w:169,h:6},
+      {x:189,y:253,w:19,h:1},
+      {x:210,y:256,w:1,h:88},
+      {x:187,y:344,w:21,h:2},
+      {x:222,y:388,w:29,h:1},
+      {x:251,y:391,w:1,h:5},
+      {x:257,y:394,w:3,h:27},
+      {x:222,y:391,w:1,h:7},
+      {x:216,y:398,w:1,h:17},
+      {x:312,y:394,w:2,h:25},
+      {x:270,y:394,w:41,h:2},
+      {x:269,y:398,w:1,h:19},
+      {x:317,y:412,w:25,h:4},
+      {x:270,y:282,w:1,h:35},
+      {x:272,y:314,w:48,h:1},
+      {x:320,y:280,w:1,h:35},
+      {x:275,y:280,w:40,h:2},
+      {x:373,y:257,w:3,h:38},
+      {x:376,y:292,w:23,h:3},
+      {x:375,y:253,w:22,h:2},
+      {x:391,y:301,w:1,h:10},
+      {x:413,y:330,w:1,h:33},
+      {x:409,y:295,w:19,h:1},
+      {x:423,y:249,w:4,h:47},
+      {x:410,y:253,w:18,h:1},
+      {x:551,y:329,w:3,h:21},
+      {x:552,y:319,w:22,h:4},
+      {x:553,y:350,w:24,h:3},
+      {x:405,y:433,w:11,h:46},
+      {x:407,y:512,w:9,h:112},
+      {x:420,y:603,w:77,h:15},
+      {x:487,y:571,w:9,h:29},
+      {x:497,y:570,w:101,h:7},
+      {x:585,y:435,w:12,h:134},
+      {x:586,y:166,w:13,h:216},
+      {x:407,y:163,w:184,h:16},
+      {x:644,y:131,w:7,h:227},
+      {x:619,y:350,w:18,h:3},
+      {x:619,y:332,w:2,h:21},
+      {x:619,y:335,w:22,h:1},
+      {x:599,y:180,w:43,h:4},
+      {x:417,y:434,w:1,h:1},
+      {x:463,y:433,w:7,h:29},
+      {x:472,y:459,w:114,h:4},
+      {x:463,y:377,w:8,h:25},
+      {x:470,y:380,w:127,h:3},
+      {x:603,y:514,w:44,h:9},
+      {x:609,y:557,w:32,h:37},
+      {x:520,y:594,w:37,h:21},
+      {x:446,y:638,w:31,h:9},
+      {x:120,y:535,w:25,h:27},
+      {x:125,y:476,w:6,h:11},
+      {x:131,y:615,w:16,h:18},
+      {x:163,y:658,w:13,h:5},
+      {x:71,y:637,w:34,h:49},
+      // ---- 邻居家 91 条（玩家在标记模式里画的原框）----
+      {x:980,y:448,w:10,h:227},
+      {x:992,y:666,w:457,h:8},
+      {x:1442,y:215,w:7,h:449},
+      {x:981,y:213,w:460,h:10},
+      {x:981,y:223,w:9,h:176},
+      {x:1137,y:223,w:6,h:193},
+      {x:1136,y:445,w:8,h:29},
+      {x:1144,y:466,w:52,h:5},
+      {x:1225,y:466,w:13,h:8},
+      {x:1235,y:474,w:3,h:98},
+      {x:1235,y:566,w:108,h:7},
+      {x:1335,y:548,w:8,h:18},
+      {x:1336,y:548,w:76,h:6},
+      {x:1406,y:461,w:5,h:87},
+      {x:1321,y:476,w:80,h:5},
+      {x:1321,y:460,w:4,h:13},
+      {x:1307,y:459,w:14,h:1},
+      {x:1280,y:461,w:3,h:103},
+      {x:1319,y:424,w:3,h:15},
+      {x:1320,y:423,w:27,h:2},
+      {x:1345,y:423,w:65,h:2},
+      {x:1407,y:227,w:4,h:236},
+      {x:1145,y:227,w:262,h:4},
+      {x:1277,y:232,w:6,h:200},
+      {x:993,y:570,w:202,h:9},
+      {x:1004,y:598,w:38,h:41},
+      {x:1007,y:642,w:18,h:15},
+      {x:1052,y:601,w:58,h:20},
+      {x:1158,y:611,w:21,h:15},
+      {x:1153,y:639,w:26,h:14},
+      {x:1055,y:642,w:79,h:22},
+      {x:1350,y:584,w:20,h:12},
+      {x:1005,y:545,w:23,h:9},
+      {x:1043,y:540,w:5,h:8},
+      {x:1019,y:523,w:9,h:8},
+      {x:1038,y:518,w:14,h:7},
+      {x:994,y:474,w:26,h:33},
+      {x:1034,y:462,w:16,h:16},
+      {x:1067,y:485,w:9,h:10},
+      {x:1043,y:495,w:12,h:1},
+      {x:1110,y:461,w:16,h:14},
+      {x:1156,y:481,w:18,h:12},
+      {x:1178,y:492,w:11,h:11},
+      {x:1182,y:483,w:12,h:5},
+      {x:1091,y:513,w:69,h:38},
+      {x:1174,y:550,w:10,h:2},
+      {x:1175,y:526,w:12,h:10},
+      {x:1180,y:549,w:9,h:12},
+      {x:1172,y:556,w:5,h:2},
+      {x:996,y:385,w:15,h:12},
+      {x:1025,y:355,w:34,h:17},
+      {x:1118,y:347,w:4,h:21},
+      {x:1111,y:303,w:16,h:30},
+      {x:1022,y:249,w:50,h:30},
+      {x:1007,y:299,w:16,h:12},
+      {x:1040,y:297,w:4,h:4},
+      {x:1058,y:304,w:4,h:3},
+      {x:1117,y:279,w:7,h:3},
+      {x:1125,y:247,w:4,h:3},
+      {x:1001,y:235,w:9,h:6},
+      {x:1000,y:255,w:4,h:4},
+      {x:996,y:269,w:9,h:7},
+      {x:1186,y:242,w:44,h:37},
+      {x:1188,y:304,w:45,h:8},
+      {x:1150,y:255,w:28,h:5},
+      {x:1150,y:282,w:10,h:2},
+      {x:1154,y:303,w:8,h:43},
+      {x:1153,y:373,w:20,h:9},
+      {x:1150,y:395,w:32,h:15},
+      {x:1203,y:340,w:19,h:32},
+      {x:1259,y:339,w:17,h:37},
+      {x:1240,y:245,w:32,h:15},
+      {x:1260,y:265,w:6,h:8},
+      {x:1266,y:283,w:6,h:8},
+      {x:1265,y:296,w:6,h:6},
+      {x:1263,y:322,w:7,h:6},
+      {x:1227,y:451,w:1,h:2},
+      {x:1289,y:334,w:6,h:31},
+      {x:1333,y:325,w:40,h:55},
+      {x:1382,y:264,w:15,h:32},
+      {x:1318,y:269,w:65,h:16},
+      {x:1288,y:253,w:9,h:14},
+      {x:1291,y:291,w:4,h:25},
+      {x:1384,y:388,w:17,h:28},
+      {x:1243,y:541,w:36,h:1},
+      {x:1343,y:515,w:26,h:17},
+      {x:1337,y:484,w:38,h:16},
+      {x:1384,y:506,w:11,h:33},
+      {x:1289,y:512,w:1,h:25},
+      {x:1291,y:536,w:12,h:23},
+      {x:1228,y:399,w:14,h:12},
+      // ---- 市场 60 条（玩家在标记模式里画的原框）----
+      {x:150,y:877,w:455,h:6},
+      {x:601,y:883,w:4,h:449},
+      {x:143,y:1330,w:458,h:5},
+      {x:143,y:1121,w:10,h:208},
+      {x:144,y:874,w:5,h:183},
+      {x:161,y:1035,w:20,h:28},
+      {x:162,y:1126,w:14,h:15},
+      {x:168,y:1147,w:8,h:16},
+      {x:156,y:1006,w:11,h:11},
+      {x:161,y:895,w:6,h:8},
+      {x:165,y:910,w:4,h:11},
+      {x:167,y:921,w:4,h:11},
+      {x:182,y:899,w:12,h:2},
+      {x:268,y:897,w:14,h:10},
+      {x:230,y:894,w:17,h:10},
+      {x:300,y:895,w:16,h:5},
+      {x:488,y:889,w:18,h:16},
+      {x:506,y:915,w:8,h:8},
+      {x:522,y:905,w:44,h:14},
+      {x:568,y:902,w:14,h:13},
+      {x:525,y:950,w:52,h:54},
+      {x:559,y:1041,w:29,h:56},
+      {x:530,y:1111,w:26,h:31},
+      {x:570,y:1122,w:20,h:32},
+      {x:551,y:1167,w:34,h:27},
+      {x:535,y:1161,w:9,h:13},
+      {x:533,y:1183,w:7,h:15},
+      {x:535,y:1214,w:23,h:30},
+      {x:579,y:1233,w:9,h:7},
+      {x:323,y:1234,w:53,h:68},
+      {x:419,y:1238,w:59,h:48},
+      {x:492,y:1268,w:14,h:13},
+      {x:490,y:1289,w:16,h:13},
+      {x:517,y:1286,w:17,h:6},
+      {x:561,y:1269,w:23,h:26},
+      {x:577,y:1308,w:15,h:6},
+      {x:304,y:1314,w:2,h:14},
+      {x:304,y:1319,w:268,h:7},
+      {x:212,y:1304,w:88,h:20},
+      {x:164,y:1299,w:30,h:10},
+      {x:165,y:1222,w:24,h:43},
+      {x:164,y:1198,w:9,h:7},
+      {x:180,y:1174,w:5,h:6},
+      {x:162,y:1153,w:11,h:6},
+      {x:221,y:1135,w:9,h:7},
+      {x:242,y:1130,w:19,h:24},
+      {x:236,y:1164,w:31,h:37},
+      {x:233,y:1260,w:28,h:24},
+      {x:285,y:1272,w:25,h:15},
+      {x:392,y:1275,w:18,h:11},
+      {x:280,y:1122,w:77,h:82},
+      {x:411,y:1129,w:69,h:75},
+      {x:407,y:1026,w:77,h:70},
+      {x:482,y:1064,w:7,h:9},
+      {x:407,y:900,w:69,h:105},
+      {x:260,y:952,w:70,h:67},
+      {x:240,y:1034,w:18,h:18},
+      {x:240,y:997,w:8,h:7},
+      {x:244,y:971,w:4,h:2},
+      {x:270,y:1037,w:14,h:19},
+      // ---- 工地 57 条（玩家在标记模式里画的原框）----
+      {x:704,y:875,w:3,h:183},
+      {x:700,y:1121,w:12,h:210},
+      {x:712,y:1328,w:458,h:3},
+      {x:1159,y:876,w:11,h:452},
+      {x:709,y:876,w:450,h:3},
+      {x:708,y:887,w:25,h:18},
+      {x:718,y:911,w:9,h:6},
+      {x:723,y:921,w:9,h:7},
+      {x:744,y:891,w:5,h:4},
+      {x:787,y:885,w:14,h:16},
+      {x:829,y:887,w:17,h:19},
+      {x:850,y:890,w:20,h:12},
+      {x:988,y:895,w:18,h:5},
+      {x:1026,y:892,w:10,h:16},
+      {x:1044,y:890,w:11,h:13},
+      {x:1078,y:895,w:20,h:11},
+      {x:1103,y:892,w:15,h:14},
+      {x:1133,y:890,w:12,h:16},
+      {x:1142,y:905,w:2,h:1},
+      {x:1059,y:890,w:8,h:13},
+      {x:722,y:1009,w:13,h:14},
+      {x:716,y:1041,w:90,h:20},
+      {x:797,y:942,w:4,h:106},
+      {x:797,y:942,w:155,h:6},
+      {x:959,y:945,w:4,h:113},
+      {x:843,y:1051,w:120,h:7},
+      {x:963,y:1024,w:85,h:6},
+      {x:1041,y:1030,w:7,h:77},
+      {x:959,y:918,w:205,h:137},
+      {x:964,y:1054,w:198,h:111},
+      {x:795,y:1090,w:2,h:68},
+      {x:797,y:1156,w:130,h:2},
+      {x:720,y:1121,w:19,h:8},
+      {x:893,y:1072,w:36,h:8},
+      {x:893,y:1183,w:22,h:20},
+      {x:825,y:1180,w:89,h:19},
+      {x:719,y:1145,w:23,h:25},
+      {x:738,y:1171,w:12,h:16},
+      {x:724,y:1198,w:6,h:10},
+      {x:726,y:1217,w:19,h:44},
+      {x:724,y:1292,w:27,h:21},
+      {x:761,y:1306,w:410,h:18},
+      {x:797,y:1261,w:42,h:25},
+      {x:840,y:1269,w:37,h:14},
+      {x:885,y:1260,w:23,h:20},
+      {x:927,y:1251,w:22,h:42},
+      {x:958,y:1284,w:10,h:9},
+      {x:971,y:1257,w:27,h:7},
+      {x:995,y:1287,w:15,h:2},
+      {x:1001,y:1257,w:15,h:4},
+      {x:1033,y:1281,w:12,h:17},
+      {x:1072,y:1220,w:38,h:34},
+      {x:1122,y:1254,w:12,h:10},
+      {x:1103,y:1194,w:22,h:3},
+      {x:1074,y:1189,w:19,h:14},
+      {x:995,y:1194,w:48,h:4},
+      {x:1143,y:1175,w:16,h:121},
+      // ---- 学校 47 条（玩家在标记模式里画的原框）----
+      {x:1529,y:929,w:191,h:236},
+      {x:1263,y:875,w:11,h:174},
+      {x:1265,y:1125,w:2,h:209},
+      {x:1265,y:1327,w:469,h:7},
+      {x:1721,y:874,w:10,h:453},
+      {x:1280,y:874,w:441,h:10},
+      {x:1279,y:894,w:11,h:38},
+      {x:1298,y:897,w:18,h:1},
+      {x:1355,y:894,w:10,h:10},
+      {x:1382,y:896,w:22,h:9},
+      {x:1414,y:894,w:19,h:7},
+      {x:1544,y:894,w:25,h:4},
+      {x:1570,y:898,w:20,h:5},
+      {x:1598,y:894,w:20,h:9},
+      {x:1615,y:894,w:14,h:3},
+      {x:1640,y:891,w:15,h:11},
+      {x:1660,y:894,w:11,h:6},
+      {x:1675,y:891,w:16,h:11},
+      {x:1698,y:897,w:8,h:5},
+      {x:1704,y:890,w:11,h:12},
+      {x:1279,y:1038,w:23,h:9},
+      {x:1281,y:1009,w:8,h:7},
+      {x:1281,y:1131,w:14,h:11},
+      {x:1280,y:1155,w:16,h:8},
+      {x:1279,y:1204,w:14,h:7},
+      {x:1284,y:1222,w:29,h:51},
+      {x:1289,y:1296,w:11,h:17},
+      {x:1334,y:1300,w:28,h:21},
+      {x:1365,y:1307,w:30,h:16},
+      {x:1399,y:1307,w:19,h:17},
+      {x:1356,y:1262,w:22,h:25},
+      {x:1409,y:1277,w:24,h:13},
+      {x:1424,y:1313,w:256,h:11},
+      {x:1483,y:1285,w:23,h:14},
+      {x:1520,y:1288,w:8,h:3},
+      {x:1698,y:1308,w:13,h:14},
+      {x:1701,y:1173,w:28,h:145},
+      {x:1361,y:1183,w:14,h:11},
+      {x:1400,y:1181,w:11,h:25},
+      {x:1421,y:1184,w:9,h:7},
+      {x:1455,y:1178,w:23,h:26},
+      {x:1359,y:1086,w:130,h:80},
+      {x:1365,y:1037,w:1,h:47},
+      {x:1349,y:1033,w:16,h:4},
+      {x:1349,y:941,w:5,h:92},
+      {x:1353,y:938,w:176,h:4},
+      {x:1523,y:939,w:1,h:222}
+    ],
+    props:[
+      {x:810,y:110,w:70,h:70,color:'#2f6b2a',tree:true},    // 家与邻居家之间的空地
+      {x:1500,y:280,w:80,h:80,color:'#2f6b2a',tree:true},   // 邻居家右侧
+      {x:20,y:140,w:70,h:70,color:'#2f6b2a',tree:true}      // 家左侧
+    ],
+    interactions:[{x:450,y:195,w:115,h:115,icon:'🛏️',label:'睡觉（恢复全部精力）',action:function(){doSleep()}}],
+    npcs:[
+      // 站位说明：这批坐标是照着玩家标好的墙算出来的"干净点"——
+      // 既不会被墙封住走不到，也不会让 NPC 站在墙里。改坐标前请先用标记模式的墙核对一遍。
+      // —— 邻居家 4 人 ——
+      // 小女孩站位下移过：原来的 y=232 被两面墙（上墙 #75 y227 / 家具盒 #133 y269）夹在一条 10px 高的死胡同里，谁都走不出去；y=288 仍在同一间屋内，且能走出院子
+      {id:'girl',name:'小女孩',x:1318,y:288,w:36,h:36,color:'#ff9ec4',spriteKey:'girl',animState:'idle',animFrame:0,animTimer:0},
+      {id:'xiaoyu',name:'哥哥',x:1296,y:316,w:36,h:36,color:'#8be28b',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      {id:'dad',name:'爸爸',x:1346,y:380,w:36,h:36,color:'#7fb3ff',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      {id:'grandma',name:'奶奶',x:1182,y:380,w:36,h:36,color:'#b8b8c8',spriteKey:'grandma',animState:'idle',animFrame:0,animTimer:0},
+      // —— 原「市场」场景的 3 位 ——
+      {id:'shopkeeper',name:'小卖铺老板',x:336,y:984,w:36,h:36,color:'#ffb84a',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      {id:'laborstore',name:'劳保用品店店长',x:364,y:1150,w:36,h:36,color:'#e0785a',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      {id:'supplier',name:'建筑材料供货商',x:484,y:1120,w:36,h:36,color:'#c8a26a',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      // —— 原「工地」场景（工程二选一入口）——
+      {id:'worker',name:'工人',x:860,y:1120,w:36,h:36,color:'#ffa94d',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      // —— 原「学校」场景（工程二选一入口）——
+      {id:'teacher',name:'老师',x:1420,y:1010,w:36,h:36,color:'#6cb8ff',spriteKey:'',animState:'idle',animFrame:0,animTimer:0},
+      {id:'principal',name:'校长',x:1486,y:1030,w:36,h:36,color:'#9ad0ff',spriteKey:'',animState:'idle',animFrame:0,animTimer:0}
+    ]
+  },
+};
+
+// 预加载贴图：大地图的多张场景图（worldImages）+ 单场景背景图（bgImageSrc）
+(function(){
+  for(var k in SCENES){
+    var s=SCENES[k];
+    if(s.bgImageSrc){s.bgImage=new Image();s.bgImage.src=s.bgImageSrc}
+    var wi=s.worldImages||[];
+    for(var i=0;i<wi.length;i++){var it=wi[i];it.img=new Image();it.img.src=it.src}
+  }
+})();
+
+/* ============================================================================
+   ★★★ 在这里设置 NPC 人设 ★★★
+   persona 是 NPC「人设」的唯一入口：它会随请求发给后端，由 server.py 的
+   _build_system_prompt() 拼进 System Prompt，成为这个 NPC 说话的依据。
+   改 persona 这一句，NPC 的口吻、性格、立场就跟着变（AI 生成的台词都照它来）。
+   字段说明：
+     role    显示名 —— 对话框里"说话人"那一行显示的文字
+     color   地图上小人 / 名字的配色
+     persona 人设正文（性格、语气、口头禅、立场）← 主要就改这里
+     giftOk  愿意收下的礼物 id（送对礼物涨好感，好感越高越好砍价）
+     trade   sells = 他卖的货 / buys = 他收的货；base 是底价
+   ★ 想加一个全新 NPC，三步：
+     ① 这里加一条（至少要有 role + persona）
+     ② 到对应场景的 npcs 数组里加一个 {id:'新的id', ...} 摆到地图上
+     ③ 若他做买卖，再补 trade（前端会据此生成"买东西/卖东西"选项）
+   ============================================================================ */
+var NPC_PROFILES={
+  // giftOk：这个 NPC 愿意收下哪些"礼物"（送礼物提升好感度 → 好感越高越容易砍价）
+  girl:{role:'小女孩',color:'#ff9ec4',persona:'你才七八岁，天真活泼，说话奶声奶气，最爱吃橘子糖。',
+    giftOk:['candy']},
+  grandma:{role:'奶奶',color:'#b8b8c8',persona:'你七十多岁，慈祥又爱唠叨，总爱讲年轻时的老故事，心疼小孩子。',
+    giftOk:[]},
+  dad:{role:'爸爸',color:'#7fb3ff',persona:'你是严厉的父亲，说话简短务实，总强调踏实做人、别走歪路。',
+    giftOk:['cigarette','wine']},
+  xiaoyu:{role:'哥哥',color:'#8be28b',persona:'你是调皮的哥哥，爱开玩笑、爱损人，但关键时候护着弟弟。',
+    giftOk:[]},
+  shopkeeper:{role:'小卖铺老板',color:'#ffb84a',persona:'你开小卖铺，嗓门亮、爱唠嗑、精于算计，卖糖卖烟卖酒，最懂人来人往的生意经。',
+    trade:{sells:{candy:{name:'橘子糖',base:120},cigarette:{name:'香烟',base:200},wine:{name:'白酒',base:350}}},
+    giftOk:['cigarette','wine']},
+  supplier:{role:'建筑材料供货商',color:'#c8a26a',persona:'你供建材，说话实在、脾气慢，张嘴就是砖头水泥的行情，喜欢和肯干的人打交道。',
+    trade:{sells:{brick:{name:'砖头',base:800},cement:{name:'水泥',base:1300}}},
+    giftOk:['cigarette','wine']},
+  laborstore:{role:'劳保用品店店长',color:'#e0785a',persona:'你看劳保用品店，嗓门大、性子直，张口闭口都是安全第一，卖安全帽和手脚架。',
+    trade:{sells:{helmet:{name:'安全帽',base:500},scaffold:{name:'手脚架',base:700}}},
+    giftOk:['cigarette','wine']},
+  worker:{role:'工人',color:'#ffa94d',persona:'你是工地上干活的工人，豪爽粗线条，嗓门大，讲义气，说话直来直去，认死理。工地上现在正赶工期，上头总想砍掉点安全措施省钱，你心里不踏实，一提这事就上火。',
+    trade:{buys:{helmet:{name:'安全帽',base:650},scaffold:{name:'手脚架',base:900}}},
+    giftOk:['cigarette','wine']},
+  teacher:{role:'老师',color:'#6cb8ff',persona:'你是教书先生，说话文雅有条理，爱讲道理、爱说教，喜欢用成语。',
+    giftOk:['cigarette','wine']},
+  principal:{role:'校长',color:'#9ad0ff',persona:'你是学校的校长，说话有威严、讲规矩，看重名声和工程质量，但愿意给肯上进的年轻人机会。学校那栋新教学楼正赶工期，你既怕耽误娃娃们开学，又怕赶工赶出隐患。',
+    trade:{buys:{brick:{name:'砖头',base:1150},cement:{name:'水泥',base:1750}}},
+    giftOk:['cigarette','wine']}
+};
+
+/* ============ §8 全局状态 ============ */
+var player={x:300,y:350,w:26,h:26,dir:'right',walkPhase:0,bobY:0,legSwing:0,lean:0,idleBlend:0,
+            spriteKey:'merchant',animState:'',animTimer:0,animFrame:0,lastDirH:'right'};   // spriteKey 指向全局精灵资源表；后四项供动画状态机使用
+var gameStarted=false;   // 开局角色创建（名字/性别/是否用云端）完成后才置 true
+var state={
+  mode:'intro',scene:'world',   // 开局先走 intro（角色创建），点「开始游戏」才进入 play
+  money:START_MONEY,displayMoney:START_MONEY,
+  energy:100,maxEnergy:100,
+  greed:0,honest:0,time:0,day:1,dailyDone:{},safetyCut:false,jobs:[],jobOffer:null,
+  doorCooldown:0,
+  dialog:null,cutscene:null,endingType:null,story:null,talkTarget:null,
+  floats:[],isMoving:false,inputLocked:false,
+  bag:{brick:0,cement:0,helmet:0,candy:0,scaffold:0,cigarette:0,wine:0},
+  trade:null,haggleMode:false,shop:null,showBag:false,haggleCount:0,
+  sceneTransition:null,events:[],
+  playerName:'',gender:'male',
+  cloud:{enabled:false,baseUrl:'',apiKey:'',model:'',ok:true,used:false,lastError:'',url:'',coolUntil:0}
+};
+function addFloat(text,x,y,color){
+  state.floats.push({text:text,x:x,y:y,color:color,life:1.6,maxLife:1.6,scale:0});
+}
+
+/* ============ §9 出生点安全化 ============ */
+// 场景可活动范围：大地图用 worldW/worldH + bg 边距，其余场景沿用 40px 墙
+function sceneBounds(s){
+  var bw=s.worldW||W,bh=s.worldH||H,m=(s.bg!=null?s.bg:WALL);
+  return {x:m,y:m,w:bw-2*m,h:bh-2*m};
+}
+function safeSpawn(sceneId,sp){
+  var s=SCENES[sceneId];if(!s)return sp;
+  var b=sceneBounds(s);
+  var r={x:sp.x,y:sp.y,w:player.w,h:player.h};
+  function isBad(){
+    if(r.x<b.x+4||r.y<b.y+4)return true;
+    if(r.x+r.w>b.x+b.w-4||r.y+r.h>b.y+b.h-4)return true;
+    var i,p;
+    var doors=s.doors||[];for(i=0;i<doors.length;i++){if(rectOverlap(r,doors[i]))return true}
+    var props=s.props||[];for(i=0;i<props.length;i++){
+      p=props[i];if(p.solid===false)continue;if(rectOverlap(r,p))return true;
+    }
+    var cols=s.colliders||[];for(i=0;i<cols.length;i++){if(rectOverlap(r,cols[i]))return true}
+    return false;
+  }
+  if(!isBad())return sp;
+  for(var ring=1;ring<=15;ring++){
+    for(var a=0;a<16;a++){
+      var ang=(a/16)*Math.PI*2;
+      var nx=clamp(sp.x+Math.cos(ang)*ring*24,b.x+6,b.x+b.w-player.w-6);
+      var ny=clamp(sp.y+Math.sin(ang)*ring*24,b.y+6,b.y+b.h-player.h-6);
+      r.x=nx;r.y=ny;
+      if(!isBad())return {x:nx,y:ny};
+    }
+  }
+  return {x:b.x+b.w/2,y:b.y+b.h/2};
+}
+
+/* ============ §10 NPC 初始化 ============ */
+function initNPCs(){
+  for(var k in SCENES){
+    var s=SCENES[k],npc=s.npcs||[];
+    for(var i=0;i<npc.length;i++){
+      var n=npc[i];
+      n.seed=Math.random()*100;
+      n.emotion='neutral';n.emotionTimer=0;
+      n.blinkTimer=1+Math.random()*3;n.blinkAmount=1;
+      n.blinking=false;n.blinkPhase=0;
+      n.trust=0;n.history=[];n.cooldown=0;n.talking=false;n.facing='down';
+      n.homeX=n.x;n.homeY=n.y;   // 记下"家"的站位：§22 NPC 走动用它当踱步中心 / 睡觉后传回的家
+      n.npcState=null;           // §22 走动状态机（首次需要时懒建立）
+    }
+  }
+}
+initNPCs();
+
+function emitEvent(e){
+  state.events.push(e);
+  if(state.events.length>30)state.events.shift();
+}
+
+/* ============ §11 LocalRuleAI ============ */
+/* 本地兜底的第一步：先"听懂玩家这句话想干什么"，再决定怎么接。
+   之前的规则只看精力/信任/钱，压根不管玩家说了啥，导致答非所问（打"你好"也可能被回"要不要睡一会儿"）。
+   这里只拦截"明显由这句话决定"的意图；其余情况返回 null，交给下面的状态分支处理。 */
+function localIntentReply(npcId,input){
+  var t=String(input||'').trim();
+  if(!t)return null;
+  var role=(NPC_PROFILES[npcId]||{}).role||'对方';
+  var lower=t.toLowerCase();
+  function R(reply,emotion,options,trustDelta){
+    return {reply:'（'+role+'）'+reply,emotion:emotion||'neutral',
+      options:options||['继续聊','离开'],trustDelta:trustDelta||0,action:{type:'none'}};
+  }
+  if(/拜拜|再见|走了|告辞|回头见|下次聊|晚安|不聊了|886|先撤|得走了/.test(t))
+    return R('行，那你忙去，路上当心。','neutral',['离开'],0);
+  if(/你好|您好|嗨|哈喽|早上好|晚上好|在吗|hello/.test(lower))
+    return R('哎，是你啊。今天怎么样？','happy',['还行','有点累','离开'],0);
+  if(/谢谢|多谢|感谢|辛苦了|麻烦你了/.test(t))
+    return R('嗐，跟我还客气啥。','happy',['继续聊','离开'],1);
+  if(/对不起|抱歉|不好意思|我错了|是我不对/.test(t))
+    return R('……算了，这事翻篇吧。','neutral',['继续聊','离开'],1);
+  if(/多少钱|什么价|怎么卖|怎么收|报个价|行情|价位|划不划算/.test(t)){
+    var te=tradeEntries({id:npcId});
+    if(te.length)return R('你想买还是想卖？说清是什么、要多少，价我给你摆出来。','neutral',te.concat(['离开']),0);
+    return R('价钱的账我可管不着，你问错人了。','neutral',['继续聊','离开'],0);
+  }
+  return null;
+}
+
+var LocalRuleAI={
+  respond:function(req){
+    var npcId=req.npcId,p=req.player,trust=req.trust;
+    var recent=(req.recentEvents||[]).slice(-5);
+    var energyRatio=p.energy/100,input=req.playerInput;
+    var recentCheat=recent.some(function(e){return e.type==='job_done'&&e.greedy});
+    var recentBrick=recent.some(function(e){return e.type==='job_done'&&e.id==='brick'});
+    var recentTeach=recent.some(function(e){return e.type==='job_done'&&e.id==='teach'});
+    var recentMarket=recent.some(function(e){return e.type==='job_done'&&e.id==='market'});
+    var reply='',emotion='neutral',options=[],trustDelta=0;
+    var action={type:'none'};
+
+    // ---- 本地降级模式也要能交易：用和 server 相同的定价规则算价（AI 不报数字）----
+    var _trade=resolveTradeLocal(req.profile,req.player,req.trade,req.playerInput||'');
+    if(_trade)return tradeResponse(_trade,npcId);
+
+    // ---- 先按玩家这句话的意图回应（打招呼/道谢/告别/问价…），避免答非所问 ----
+    if(!req.trade){
+      var _intent=localIntentReply(npcId,input);
+      if(_intent)return _intent;
+    }
+
+    if(energyRatio<0.2){
+      var m1={
+        girl:'哥哥你脸色好差……要不要睡一会儿？',
+        grandma:'（奶奶皱眉）孩子，气色不对。歇歇吧。',
+        dad:'看你脸都白了，别硬撑，回家睡觉。',
+        xiaoyu:'喂！你看起来很累诶，快回去休息吧！',
+        shopkeeper:'哎哟你这脸——先歇着，摊子不急。',
+        worker:'兄弟，你这样上工要出事。先回去睡。',
+        teacher:'你的状态不适合上课。先休息。',
+        principal:'学校的事不急，先歇着。'
+      };
+      reply=m1[npcId]||'你看起来很累。';emotion='worried';
+      options=['好的，我回去','我还能撑','离开'];
+      if(input==='好的，我回去')trustDelta=1;
+    }else if(p.safetyCut&&(npcId==='grandma'||npcId==='dad'||npcId==='worker')){
+      var m2={
+        grandma:'你那些钱是怎么来的，我心里有数。那些钱，烫手。',
+        dad:'最近是不是图省事？工地上省事，是要命的。',
+        worker:'嘿，那活儿是不是把安全措施省了？见多了，最后都进医院。'
+      };
+      reply=m2[npcId];emotion='worried';
+      options=['我知道错了','快钱也是钱','离开'];
+      if(input==='我知道错了')trustDelta=1;
+      if(input==='快钱也是钱')trustDelta=-1;
+    }else if(recentCheat&&(npcId==='xiaoyu'||npcId==='girl')){
+      reply=npcId==='girl'?'我好像听到工地有奇怪的声音……哥哥，那边安全吗？'
+                          :'喂！你又跑去工地搞那些了吧？我爸说那种活迟早出事。';
+      emotion='worried';
+      options=['没事的','我以后不去了','离开'];
+      if(input==='我以后不去了')trustDelta=1;
+    }else if(recentBrick&&npcId==='dad'){
+      reply='又去搬砖了？一天十个钱，踏实。别嫌少，别学那些偷懒的。';
+      options=['嗯，我会的','太慢了','离开'];
+      if(input==='嗯，我会的')trustDelta=1;
+    }else if(recentTeach&&(npcId==='teacher'||npcId==='xiaoyu')){
+      reply=npcId==='teacher'?'你代课很认真，孩子们都喜欢你。':'听说你去学校代课了？好厉害！';
+      emotion='happy';
+      options=['谢谢','还好啦','离开'];
+      trustDelta=1;
+    }else if(recentMarket&&npcId==='shopkeeper'){
+      reply='刚才你帮我卖了不少水果，谢啦。下次再来啊。';
+      emotion='happy';
+      options=['不客气','还有活吗','离开'];
+      trustDelta=1;
+    }else if(trust>=3){
+      var m3={
+        girl:'哥哥！你上次答应陪我玩的哦！',
+        grandma:'（奶奶点点头）你是个好孩子。',
+        dad:'有你这样的朋友，我放心。',
+        xiaoyu:'咱们是好朋友啦！等我攒够钱，请你吃橘子糖！',
+        shopkeeper:'常来啊，我给你留最好的橘子。',
+        worker:'跟哥几个处得来，以后有事说话。',
+        teacher:'你是个踏实的年轻人。',
+        principal:'你是个肯上进的年轻人，学校看得见。'
+      };
+      reply=m3[npcId]||'很高兴见到你。';emotion='happy';
+      options=['当然啦','谢谢你','离开'];
+    }else if(trust<=-2){
+      var m4={
+        girl:'……我不跟你说话了。',
+        grandma:'（奶奶转过身去，不看你）',
+        dad:'你走吧。',
+        xiaoyu:'哼，不想理你。',
+        shopkeeper:'……',
+        worker:'离我远点。',
+        teacher:'没什么可说的。',
+        principal:'……你好自为之。'
+      };
+      reply=m4[npcId]||'……';emotion='sad';
+      options=['对不起','离开'];
+      if(input==='对不起')trustDelta=1;
+    }else{
+      var ratio=p.money/GOAL;
+      if(ratio<0.25){
+        var m5={girl:'哥哥，你在攒什么呀？',grandma:'慢慢来，不着急。',dad:'刚开始都难。',
+          xiaoyu:'攒钱很难吧？我也在攒糖钱！',shopkeeper:'新来的？来看看今天的橘子。',
+          worker:'新面孔啊，来工地干活的？',teacher:'想读书，随时欢迎来学校。',principal:'学校还在盖，想出力随时来。'};
+        reply=m5[npcId]||'你好啊。';
+      }else if(ratio<0.6){
+        var m6={girl:'你已经攒好多啦！',grandma:'看得出你在用心。',dad:'干得不错，稳住。',
+          xiaoyu:'哇，快一半了！加油！',shopkeeper:'常客了啊。',worker:'你小子干得不错。',
+          teacher:'听说你很勤快。',principal:'听说你很勤快，材料备得不错。'};
+        reply=m6[npcId]||'继续加油。';
+      }else if(ratio<1){
+        var m7={girl:'快攒够了！加油！',grandma:'就快到了。记住怎么来的。',dad:'小心最后关头。',
+          xiaoyu:'就差一点了！冲啊！',shopkeeper:'快满了吧？',worker:'差不多了，别功亏一篑。',
+          teacher:'快要到终点了。',principal:'就快盖好了，别在最后关头出岔子。'};
+        reply=m7[npcId]||'就快了。';
+      }else reply='你已经做到了。';
+      options=buildOptions(npcId);
+    }
+    return {reply:reply,emotion:emotion,options:options,trustDelta:trustDelta,action:action};
+  }
+};
+
+function buildOptions(npcId){
+  var pools={
+    girl:['陪她玩','问问她爸爸','离开'],
+    grandma:['聊聊钱的来路','说自己很努力','离开'],
+    dad:['问工地的活','劝他注意安全','离开'],
+    xiaoyu:['聊聊学校','问他妹妹','离开'],
+    shopkeeper:['问问小卖铺','聊聊行情','离开'],
+    supplier:['问问建材价','聊聊行情','离开'],
+    laborstore:['问问劳保用品','聊聊工地','离开'],
+    worker:['问问工地安全','聊聊工钱','离开'],
+    teacher:['聊聊学习','问问学校','离开'],
+    principal:['聊聊建校','问问工程','离开']
+  };
+  return pools[npcId]||['继续聊','离开'];
+}
+// 本地降级：和 server 同款交易判定（避免离线时完全不能买卖）
+var _RE_BUY_LOCAL=/买|进货|采购|要货|来点|拿点|多进|囤|批发/;
+var _RE_SELL_LOCAL=/卖|出货|出售|卖点|卖货|变现|出手/;
+function resolveTradeLocal(profile,player,tradeInput,text){
+  var tp=(profile||{}).trade||{};
+  var direction=null,item=null,qty=null,offer=null,stage='quote';
+  if(tradeInput&&typeof tradeInput==='object'){
+    direction=tradeInput.direction||null;item=tradeInput.item||null;
+    qty=tradeInput.qty;
+    offer=(typeof tradeInput.offer==='number')?tradeInput.offer:null;
+    stage=tradeInput.stage||'quote';
+  }
+  if(!direction||!item){
+    if(!text)return null;
+    if(_RE_BUY_LOCAL.test(text))direction='buy';
+    else if(_RE_SELL_LOCAL.test(text))direction='sell';
+    else return null;
+    if(/砖/.test(text))item='brick';
+    else if(/水泥/.test(text))item='cement';
+    else if(/安全帽|帽子|头盔/.test(text))item='helmet';
+    else if(/手脚架|脚手架|架子/.test(text))item='scaffold';
+    else if(/橘子糖|桔子糖|糖果|糖/.test(text))item='candy';
+    else if(/香烟|烟/.test(text))item='cigarette';
+    else if(/白酒|酒/.test(text))item='wine';
+    else return null;
+    var mm=/(\d{1,3})/.exec(text);
+    qty=mm?parseInt(mm[1],10):1;stage='quote';
+  }
+  qty=Math.max(1,Math.min(99,parseInt(qty,10)||1));
+  var pool=(direction==='buy'?tp.sells:tp.buys)||{};
+  var good=pool[item];
+  if(!good)return {action:'none',status:'unavailable',direction:direction,item:item,
+    itemName:_GOOD_NAMES[item]||item};
+  var base=parseInt(good.base,10)||0,name=good.name||_GOOD_NAMES[item]||item;
+  var trust=Number((player&&player.trust)||0);
+  var raw,lo,hi;
+  if(direction==='buy'){raw=Math.round(base*(1-trust*0.04));lo=Math.round(base*0.6);hi=Math.round(base*1.2)}
+  else{raw=Math.round(base*(1+trust*0.04));lo=Math.round(base*0.8);hi=Math.round(base*1.4)}
+  var unit=Math.max(lo,Math.min(hi,raw));
+  if(stage==='offer'&&offer!==null){
+    if(offer>=lo&&offer<=hi){
+      var total=offer*qty,bd={};
+      if(direction==='buy'){
+        if((player.money||0)<total)return {action:'reject',status:'insufficient',direction:direction,item:item,itemName:name,qty:qty,ask:unit,offer:offer,total:total,min:lo,max:hi};
+        bd[item]=qty;
+        return {action:'accept',status:'accepted',direction:direction,item:item,itemName:name,qty:qty,
+          unitPrice:offer,total:total,moneyDelta:-total,bagDelta:bd,min:lo,max:hi};
+      }
+      if(((player.bag||{})[item]||0)<qty)return {action:'reject',status:'insufficient',direction:direction,item:item,itemName:name,qty:qty,ask:unit,offer:offer,total:total,min:lo,max:hi};
+      bd[item]=-qty;
+      return {action:'accept',status:'accepted',direction:direction,item:item,itemName:name,qty:qty,
+        unitPrice:offer,total:total,moneyDelta:total,bagDelta:bd,min:lo,max:hi};
+    }
+    // 超出区间 → NPC 反出一个价
+    return {action:'counter',status:'countered',direction:direction,item:item,itemName:name,qty:qty,
+      ask:unit,offer:offer,counter:(offer<lo?lo:hi),min:lo,max:hi};
+  }
+  return {action:'quote',status:'quoted',direction:direction,item:item,itemName:name,qty:qty,
+    ask:unit,min:lo,max:hi};
+}
+function tradeResponse(trade,npcId){
+  var name=trade.itemName,reply,emotion='neutral',trustDelta=0;
+  if(trade.action==='quote'){
+    reply=trade.direction==='buy'
+      ? ('要'+name+'是吧？价钱我摆这儿了，你看合不合适。')
+      : ('这'+name+'我收，行情价就这个数。');
+  }else if(trade.action==='accept'){
+    reply='行，就按你说的价，成交！';emotion='happy';trustDelta=1;
+  }else if(trade.action==='counter'){
+    reply=trade.direction==='buy'
+      ? '你这个价我可卖不了，最低就这样了。'
+      : '这个价我收不了，你再添点吧。';
+    emotion='angry';
+  }else{
+    reply='这买卖做不成。';emotion='sad';
+    if(trade.status==='insufficient')reply=trade.direction==='buy'?'你钱不够啊，回去再攒攒。':'你手里没这么多货。';
+  }
+  return {reply:reply,emotion:emotion,options:[],trustDelta:trustDelta,action:{type:'none'},trade:trade};
+}
+
+/* ============ §12 RemoteLLM + Adapter ============ */
+function validateAIResponse(data){
+  if(!data||typeof data!=='object')throw new Error('bad json');
+  var reply=String(data.reply==null?'':data.reply).slice(0,120);
+  if(!reply)reply='……';
+  var okE=['happy','sad','angry','worried','neutral','surprised'];
+  var emotion=okE.indexOf(data.emotion)>=0?data.emotion:'neutral';
+  var options=Array.isArray(data.options)?data.options.slice(0,4).map(function(o){
+    return String(o).replace(/^[\s#\-*\d.、]+/,'').replace(/["'“”]/g,'').trim().slice(0,14);
+  }).filter(function(o){return o.length>0}).slice(0,3):[];
+  if(options.length===0)options=['离开'];
+  var trustDelta=clamp(Math.round(Number(data.trustDelta)||0),-3,3);
+  var action={type:'none'},a=data.action;
+  if(a&&typeof a==='object'){
+    if(a.type==='give')action={type:'give',money:clamp(Math.round(Number(a.money)||0),0,10)};
+    else if(a.type==='take')action={type:'take',energy:clamp(Math.round(Number(a.energy)||0),0,5)};
+    else if(a.type==='warp'&&SCENES[a.scene])action={type:'warp',scene:a.scene};
+  }
+  var end=!!data.end;
+  var trade=(data.trade&&typeof data.trade==='object')?data.trade:null;
+  var cloud=(data.cloud&&typeof data.cloud==='object')?data.cloud:null;
+  return {reply:reply,emotion:emotion,end:end,options:options,trustDelta:trustDelta,action:action,trade:trade,cloud:cloud};
+}
+
+/* ============ §12b 接口调试日志（F12 控制台里看 [API] 开头的日志即可定位问题） ============ */
+var API_LOG=true;   // 不想看日志就把这里改成 false
+function _maskKey(k){k=String(k||'');return k?(k.length<=10?'***':k.slice(0,6)+'…'+k.slice(-4)):'(空)'}
+function _netLog(tag,obj){if(!API_LOG)return;try{console.log('%c[API] '+tag,'color:#4aa8ff',obj===undefined?'':obj)}catch(e){}}
+function _netErr(tag,obj){try{console.error('[API] '+tag,obj===undefined?'':obj)}catch(e){}}
+// 把服务端回传的云端状态写进 state；失败时顺手在玩家头顶飘一条红字提示
+var CLOUD_LS_KEY='coins_of_100_cloud_cfg';   // 云端配置存 localStorage 用的键（开局页共用同一个）
+var CLOUD_COOL_MS=60000;   // 云端失败后的「熔断」时长：这段时间不再尝试云端，直接走本地，避免每回合都白等云端超时
+function _saveCloudCfg(){
+  try{localStorage.setItem(CLOUD_LS_KEY,JSON.stringify({
+    name:state.playerName,gender:state.gender,
+    baseUrl:state.cloud.baseUrl,apiKey:state.cloud.apiKey,model:state.cloud.model,
+    lastError:state.cloud.lastError||''}))}catch(e){}
+}
+function _applyCloudStatus(c){
+  if(!c||!state.cloud)return;
+  state.cloud.used=!!c.used;state.cloud.ok=!!c.ok;
+  state.cloud.lastError=c.error||'';
+  if(c.url)state.cloud.url=c.url;
+  // 熔断：这次云端只要没成功，就冷却一段时间；冷却期内每回合直接走本地，不再反复白等云端超时
+  if(c.used)state.cloud.coolUntil=c.ok?0:(Date.now()+CLOUD_COOL_MS);
+  _saveCloudCfg();                    // 记到本地，下次打开开局页就能看到上次为什么失败
+  if(!c.ok&&c.error){
+    var now=Date.now();
+    if(!_applyCloudStatus._t||now-_applyCloudStatus._t>6000){
+      _applyCloudStatus._t=now;
+      addFloat('云端连不上，'+Math.round(CLOUD_COOL_MS/1000)+'秒内先用本地AI',player.x+player.w/2,player.y-62,'#ff8080');
+    }
+  }
+}
+
+/* 前端等待后端的上限。服务端云端已收敛到 30 秒/35 秒上限，加本地 Ollama 60 秒，稳稳落在 150 秒内。 */
+var FRONT_TIMEOUT=150000;
+
+var RemoteLLM={
+  chat:function(req){
+    if(location.protocol==='file:'){
+      _netErr('无法请求后端：页面是 file:// 直接打开的，没有代理服务可调',
+        '请改用「启动游戏.bat」或 http://127.0.0.1:8000 打开页面');
+      return Promise.reject(new Error('no backend'));
+    }
+    var t0=Date.now();
+    // ① 请求参数：重点看 cloud 里有没有 baseUrl/model，以及 key 是否为空
+    _netLog('→ POST /api/chat',{
+      npcId:req.npcId,playerInput:req.playerInput,trade:req.trade,history:req.history,
+      cloud:req.cloud?{baseUrl:req.cloud.baseUrl,model:req.cloud.model,apiKey:_maskKey(req.cloud.apiKey)}
+                     :'无（用本地模型）'
+    });
+    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+    var timer=setTimeout(function(){if(ctrl)ctrl.abort()},FRONT_TIMEOUT);
+    return fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(req),
+      signal:ctrl?ctrl.signal:undefined
+    }).then(function(res){
+      clearTimeout(timer);
+      // ② 响应：先拿到原始文本再解析，解析失败也能看到原文
+      return res.text().then(function(txt){
+        var data=null;
+        try{data=JSON.parse(txt)}catch(e){
+          _netErr('响应不是合法 JSON',{status:res.status,body:String(txt).slice(0,400)});
+        }
+        if(!res.ok){
+          _netErr('后端返回错误 HTTP '+res.status,{body:data||String(txt).slice(0,400)});
+          if(data)_applyCloudStatus(data.cloud);
+          throw new Error('HTTP '+res.status);
+        }
+        _netLog('← '+res.status+'（'+(Date.now()-t0)+'ms）',data);
+        if(data&&data.cloud){
+          if(data.cloud.ok)_netLog('云端调用成功','实际地址 '+data.cloud.url);
+          else _netErr('云端调用失败，服务端已自动回退本地模型',data.cloud);
+        }
+        return validateAIResponse(data);
+      });
+    }).catch(function(err){
+      clearTimeout(timer);
+      // ③ 错误：名称 / 消息 / 耗时 / 可能的提示
+      _netErr('请求失败',{name:err&&err.name,message:err&&err.message,
+        elapsed:(Date.now()-t0)+'ms',
+        hint:err&&err.name==='AbortError'?'前端等待超过 120 秒，已放弃':undefined});
+      throw err;
+    });
+  }
+};
+
+/* 后端一时连不上时的冷却时间：这段时间用本地兜底，到点了自动回头再试后端。
+   以前是"失败一次就整局不再用后端"，所以玩着玩着会突然永久显示"后端连不上"。 */
+var BACKEND_COOLDOWN=20000;
+
+var AIAdapter={
+  mode:'remote',degraded:false,degradedUntil:0,lastReason:'',
+  chat:function(req){
+    var self=this;
+    if(this.mode==='local')return Promise.resolve(LocalRuleAI.respond(req));
+    if(this.degraded){
+      if(Date.now()<this.degradedUntil)return Promise.resolve(LocalRuleAI.respond(req));
+      this.degraded=false;                 // 冷却期结束 → 自动恢复，重新试后端
+      _netLog('后端冷却期结束，本次重新尝试连接后端');
+    }
+    return RemoteLLM.chat(req).catch(function(err){
+      // 只有「连本机后端都失败」才会走到这里；云端配置错误时后端会自己回退本地，不算降级
+      self.degraded=true;
+      self.degradedUntil=Date.now()+BACKEND_COOLDOWN;
+      self.lastReason=(err&&err.name==='AbortError')
+        ? '等待后端超过 '+(FRONT_TIMEOUT/1000)+' 秒还没回'
+        : ((err&&err.message)||'未知错误');
+      _netErr('本回合改用本地兜底 AI；'+Math.round(BACKEND_COOLDOWN/1000)+' 秒后会自动重试后端',
+        {原因:self.lastReason});
+      addFloat('后端暂时连不上，先本地兜底',player.x+player.w/2,player.y-62,'#ffb060');
+      return LocalRuleAI.respond(req);
+    });
+  }
+};
+
+/* ============ §13 DialogueManager ============ */
+function startNPCDialog(npc){
+  state.talkTarget=null;      // 已进入对话，清掉地面上的「按 F 交谈」提示目标
+  state.mode='dialog';
+  state.trade=null;state.haggleMode=false;state.shop=null;state.haggleCount=0;
+  state.dialog={
+    npc:npc,speaker:npc.name,lines:['……'],
+    index:0,charIndex:0,charTimer:0,
+    options:null,optionRects:[],waitingForAI:true,aiResult:null,round:0,
+    playerSpeaking:false      // 当前说话方是不是玩家：决定双立绘谁亮谁暗、台词行显示「你」还是 NPC
+  };
+  npc.talking=true;
+  emitEvent({type:'dialog_start',npcId:npc.id,t:state.time});
+  showChatInput();
+  requestAIResponse(npc,null);
+}
+
+function requestAIResponse(npc,playerInput,tradeOverride){
+  var knowsName=(npc.id==='grandma'&&!!state.playerName);
+  var cloudCooling=!!(state.cloud&&state.cloud.coolUntil&&Date.now()<state.cloud.coolUntil);
+  if(cloudCooling)_netLog('云端处于熔断冷却期，本回合直接用本地模型');
+  var req={
+    npcId:npc.id,profile:NPC_PROFILES[npc.id],scene:state.scene,
+    player:{money:state.money,energy:state.energy,bag:state.bag,
+      greed:state.greed,honest:state.honest,goal:GOAL,trust:npc.trust,
+      safetyCut:!!state.safetyCut,
+      name:state.playerName,gender:state.gender,npcKnowsName:knowsName},
+    trust:npc.trust,recentEvents:state.events.slice(-5),
+    history:npc.history.slice(-8),playerInput:playerInput,
+    trade:tradeOverride||null,
+    cloud:(state.cloud&&state.cloud.enabled&&!cloudCooling)
+      ?{baseUrl:state.cloud.baseUrl,apiKey:state.cloud.apiKey,model:state.cloud.model}:null
+  };
+  AIAdapter.chat(req).then(function(result){
+    if(result&&result.cloud)_applyCloudStatus(result.cloud);   // 先记下云端状态，连不上时 HUD 会变红
+    if(!state.dialog||state.dialog.npc!==npc)return;
+    var d=state.dialog;
+    d.aiResult=result;
+    var ending=!!result.end||!!d.forceEnd;
+    d.endAfterTyping=ending;d.endTimer=0;d.forceEnd=false;
+    d.waitingForAI=false;
+    // ---------- 交易结算（数值全部来自服务端，AI 只出台词）----------
+    var tr=result.trade||null;
+    applyTrade(npc,tr);
+    // ---------- 结算后的台词与选项 ----------
+    var line=result.reply,options;
+    if(ending){
+      options=[];
+    }else if(state.trade&&!state.haggleMode){
+      line=result.reply+'（'+state.trade.itemName+' '+state.trade.qty+' 个，'+
+        (state.trade.countered?'对方还价 ':'报价 ')+state.trade.ask+' 金币）';
+      options=tradeOptions(state.trade);
+    }else{
+      options=composeDialogOptions(npc,result.options);
+    }
+    d.speaker=npc.name;d.playerSpeaking=false;   // 说话方切回 NPC：右侧立绘全亮，玩家立绘压暗
+    d.lines=[line];d.index=0;d.charIndex=0;d.charTimer=0;
+    d.options=options;d.optionRects=[];
+    // 信任度/副作用在这里统一结算，保证每轮只结算一次
+    npc.trust=clamp(npc.trust+(result.trustDelta||0),-10,10);
+    applyAction(result.action);
+    npc.emotion=result.emotion||'neutral';
+    npc.emotionTimer=0.3;
+    npc.history.push({role:'npc',text:result.reply});
+    npc.history=npc.history.slice(-8);
+  });
+}
+// 这个 NPC 能提供哪些交易入口
+function tradeEntries(npc){
+  var t=(NPC_PROFILES[npc.id]||{}).trade||{},out=[];
+  if(t.sells)out.push('买东西');
+  if(t.buys)out.push('卖东西');
+  return out;
+}
+// 这个 NPC 愿意收的礼物里，玩家身上现在有的
+function giftableTo(npc){
+  var g=(NPC_PROFILES[npc.id]||{}).giftOk||[];
+  return g.filter(function(k){return (state.bag[k]||0)>0});
+}
+function giftLabel(k){return '🎁 '+(_GOOD_NAMES[k]||k)}
+/* ---- 工地 / 学校专项工程：二选一（高标准 or 降低安全标准） ---- */
+var JOB_DEFS={
+  worker:{entry:'接工地工程',kind:'site',title:'工地这趟活儿正缺人手',
+    high:{label:'高标准施工（垫4000·2天回16000）',cost:4000,days:2,payout:16000},
+    low:{label:'降低安全标准（垫1000·当天回23000）',cost:1000,days:0,payout:23000}},
+  principal:{entry:'接学校工程',kind:'school',title:'学校这栋新楼正赶工期',
+    high:{label:'高标准修建（垫4000·2天回16000）',cost:4000,days:2,payout:16000},
+    low:{label:'降低建筑标准（垫1000·当天回23000）',cost:1000,days:0,payout:23000}}
+};
+// 弹出工程二选一（复用现有对话框，不新建 UI、不动原有交易流程）
+function openJobOffer(npc,notice){
+  var jb=JOB_DEFS[npc.id];if(!jb)return;
+  var d=state.dialog;if(!d)return;
+  state.shop=null;state.trade=null;state.haggleMode=false;
+  state.jobOffer={npc:npc,kind:jb.kind};
+  d.lines=[notice||(jb.title+'。垫钱多、回款慢，但干得踏实；省着干来钱快。你自己挑。')];
+  d.index=0;d.charIndex=0;d.charTimer=0;d.waitingForAI=false;
+  d.options=notice?['好吧']:[jb.high.label,jb.low.label,'再想想'];
+  d.optionRects=[];
+}
+// 接下工程：高标准 = 垫付多、2 天后回款、honest+1；降低安全标准 = 垫付少、当天回款、greed+3 并打上 safetyCut
+function takeJob(npc,standard){
+  var jb=JOB_DEFS[npc.id];if(!jb)return;
+  var plan=jb[standard];if(!plan)return;
+  // 压低标准的活儿一天只准接一趟，避免一天之内反复刷钱直达结局
+  if(standard==='low'&&state.dailyDone.lowJob){
+    openJobOffer(npc,'今天已经压低标准干过一趟了，明天再来吧。');
+    return;
+  }
+  if(state.money<plan.cost){
+    openJobOffer(npc,'你手头只有 '+state.money+' 金币，垫不起这 '+plan.cost+'。先攒够再来。');
+    return;
+  }
+  state.jobOffer=null;
+  state.money-=plan.cost;
+  addFloat('-'+plan.cost+' 金币（垫付）',player.x+player.w/2,player.y-8,'#ff9f43');
+  if(standard==='high'){
+    state.honest++;
+    state.jobs.push({kind:jb.kind,standard:'high',payout:plan.payout,finishDay:state.day+plan.days});
+    emitEvent({type:'job_taken',id:jb.kind,standard:'high',t:state.time});
+    addFloat('✅ 高标准开工 · 第 '+(state.day+plan.days)+' 天回款 '+plan.payout,player.x+player.w/2,player.y-32,'#ffd700');
+  }else{
+    state.dailyDone.lowJob=true;
+    state.greed+=3;
+    state.safetyCut=true;
+    state.money+=plan.payout;
+    emitEvent({type:'job_done',greedy:true,id:jb.kind,t:state.time});
+    addFloat('💸 款已到手 +'+plan.payout,player.x+player.w/2,player.y-32,'#ff5252');
+  }
+  if(state.money>=GOAL){closeDialog();startEnding();return}
+  closeDialog();
+}
+// 组合选项：交易 / 送礼入口优先，再拼上 AI 给的选项，保证一定有「离开」
+function composeDialogOptions(npc,aiOptions){
+  var out=tradeEntries(npc).slice();
+  if(giftableTo(npc).length)out.push('送东西');
+  var jb=JOB_DEFS[npc.id];if(jb)out.push(jb.entry);   // 工地/学校工程入口
+  var ai=(aiOptions||[]).slice();
+  for(var i=0;i<ai.length;i++){
+    var o=ai[i];if(!o||o==='离开')continue;
+    if(out.indexOf(o)>=0)continue;
+    if(out.length>=4)break;
+    out.push(o);
+  }
+  out.push('离开');
+  return out.slice(0,6);
+}
+// 打开送礼：列出该 NPC 愿意收、且玩家有的礼物（送出去提升好感度 → 更好砍价）
+function openGift(npc){
+  var have=giftableTo(npc);
+  if(!have.length){sendDialogTurn(npc,'算了',null);return}
+  var d=state.dialog;
+  state.shop={mode:'gift',step:'item',item:null};
+  state.trade=null;state.haggleMode=false;
+  d.lines=['你要送点什么给他/她？'];
+  d.index=0;d.charIndex=0;d.charTimer=0;d.waitingForAI=false;
+  d.options=have.map(giftLabel).concat(['取消']);
+  d.optionRects=[];
+}
+// 打开商店：列出该 NPC 卖 / 收的商品（显示底价，成交价由服务端算）
+function openShop(npc,mode){
+  var t=(NPC_PROFILES[npc.id]||{}).trade||{};
+  var pool=(mode==='buy'?t.sells:t.buys)||{};
+  var keys=Object.keys(pool);
+  if(!keys.length){sendDialogTurn(npc,'算了',null);return}
+  var d=state.dialog;
+  state.shop={mode:mode,step:'item',item:null};
+  state.trade=null;state.haggleMode=false;
+  d.lines=[mode==='buy'?'你想买什么？点一个商品询价。':'你想卖什么？点一个商品询价。'];
+  d.index=0;d.charIndex=0;d.charTimer=0;d.waitingForAI=false;
+  d.options=keys.map(function(k){return goodLabel(pool[k],k)}).concat(['取消']);
+  d.optionRects=[];
+}
+function goodLabel(good,key){
+  return (good&&good.name?good.name:_GOOD_NAMES[key]||key)+' 底价'+((good&&good.base)||0);
+}
+function handleShopChoice(npc,opt){
+  var sh=state.shop,d=state.dialog;
+  if(opt==='取消'){state.shop=null;sendDialogTurn(npc,'先算了',null);return}
+  // ---- 送礼：选一个送出去，好感 +2（砍价更划算）----
+  if(sh.mode==='gift'){
+    var have=giftableTo(npc),gitm=null;
+    for(var gi=0;gi<have.length;gi++){
+      if(opt===giftLabel(have[gi])){gitm=have[gi];break}
+    }
+    if(!gitm){state.shop=null;sendDialogTurn(npc,opt,null);return}
+    state.shop=null;
+    state.bag[gitm]=(state.bag[gitm]||0)-1;
+    npc.trust=clamp(npc.trust+2,-10,10);
+    addFloat('好感 +2',player.x+player.w/2,player.y-20,'#ff9ec4');
+    sendDialogTurn(npc,'（把'+( _GOOD_NAMES[gitm]||gitm)+'递了过去）',null);
+    return;
+  }
+  var t=(NPC_PROFILES[npc.id]||{}).trade||{};
+  var pool=(sh.mode==='buy'?t.sells:t.buys)||{};
+  if(sh.step==='item'){
+    var found=null;
+    for(var k in pool){if(opt===goodLabel(pool[k],k)){found=k;break}}
+    if(!found){state.shop=null;sendDialogTurn(npc,opt,null);return}
+    sh.step='qty';sh.item=found;
+    d.lines=['要多少个「'+(pool[found].name||found)+'」？'];
+    d.index=0;d.charIndex=0;d.charTimer=0;d.waitingForAI=false;
+    d.options=['1 个','5 个','10 个','取消'];d.optionRects=[];
+    return;
+  }
+  var qty=parseInt(opt,10)||1;
+  var item=sh.item,mode=sh.mode;state.shop=null;
+  var itemName=(pool[item]||{}).name||item;
+  sendDialogTurn(npc,(mode==='buy'?'我要买 ':'我要卖 ')+qty+' 个'+itemName,
+    {direction:mode,item:item,qty:qty,stage:'quote'});
+}
+// 进入砍价：等玩家输入数字
+function enterHaggle(npc){
+  var d=state.dialog;
+  state.haggleCount=(state.haggleCount||0)+1;
+  state.haggleMode=true;
+  d.waitingForAI=false;d.options=null;d.optionRects=[];
+  d.lines=['你出多少钱？直接输入一个数字后回车。'];d.index=0;d.charIndex=0;d.charTimer=0;
+  addFloat('输入一个数字出价',player.x+player.w/2,player.y-8,'#ffd700');
+  showChatInput();
+}
+function tradeOptions(tr){
+  var buy=tr.direction==='buy';
+  var quit=buy?'不买了':'不卖了';
+  if(tr.countered){
+    // NPC 反过来出价了：接受反价 / 再砍一轮 / 走人（砍太多轮就只能接受或走人）
+    if((state.haggleCount||0)>=3)return ['接受反价',quit];
+    return ['接受反价','再砍价',quit];
+  }
+  return ['接受价格','砍价',quit];
+}
+function applyTrade(npc,tr){
+  if(!tr)return;
+  if(tr.action==='quote'){
+    // 报价 → 存下报价，弹「接受/砍价/不买」
+    state.trade={direction:tr.direction,item:tr.item,itemName:tr.itemName,
+      qty:tr.qty,ask:tr.ask,min:tr.min,max:tr.max};
+    state.haggleCount=0;state.haggleMode=false;
+  }else if(tr.action==='counter'){
+    // 出价落在允许区间外 → NPC 反出一个价（不是直接拒绝）
+    state.trade={direction:tr.direction,item:tr.item,itemName:tr.itemName,
+      qty:tr.qty,ask:tr.counter,min:tr.min,max:tr.max,countered:true};
+    state.haggleMode=false;
+  }else if(tr.action==='accept'){
+    // 砍价被接受 → 应用钱/货变动
+    var md=tr.moneyDelta||0,bd=tr.bagDelta||{};
+    state.money=clamp(state.money+md,0,GOAL);
+    for(var k in bd)state.bag[k]=Math.max(0,(state.bag[k]||0)+bd[k]);
+    addFloat((md>=0?'+':'')+md+' 金币',player.x+player.w/2,player.y-8,md>=0?'#ffd700':'#ff9f43');
+    state.trade=null;state.haggleMode=false;state.haggleCount=0;
+    if(state.money>=GOAL){closeDialog();startEnding()}
+  }else if(tr.action==='reject'){
+    // 钱/货不够，这单做不成，退出交易
+    state.trade=null;state.haggleMode=false;state.haggleCount=0;
+    if(tr.status==='insufficient'){
+      addFloat(tr.direction==='buy'?'钱不够了':'货不够了',player.x+player.w/2,player.y-8,'#ff6b6b');
+    }
+  }else{
+    // unavailable / none：无交易
+    state.trade=null;state.haggleMode=false;
+  }
+}
+
+function updateDialog(dt){
+  var d=state.dialog;if(!d)return;
+  var full=d.lines[d.index]||'';
+  if(d.charIndex<full.length){
+    d.charTimer+=dt;
+    while(d.charIndex<full.length){
+      var ch=full[d.charIndex];
+      var sp=('，。！？…、'.indexOf(ch)>=0)?0.14:0.022;
+      if(d.charTimer>=sp){d.charTimer-=sp;d.charIndex++}else break;
+    }
+  }
+  // 告别语说完 → 稍等一下自动关掉对话框
+  if(d.endAfterTyping&&d.charIndex>=full.length){
+    d.endTimer=(d.endTimer||0)+dt;
+    if(d.endTimer>1.2){d.endAfterTyping=false;closeDialog()}
+  }
+}
+function advanceDialog(){
+  var d=state.dialog;if(!d)return;
+  if(d.waitingForAI)return;
+  if(state.haggleMode||state.shop)return;   // 等出价 / 商店选择中，别推进关闭
+  var full=d.lines[d.index]||'';
+  if(d.charIndex<full.length){d.charIndex=full.length;return}
+  if(d.options&&d.options.length)return;
+  closeDialog();
+}
+function closeDialog(){
+  var d=state.dialog;
+  if(d&&d.npc)d.npc.talking=false;
+  state.dialog=null;state.mode='play';
+  // 强制清理交易残留，避免下次对话带着旧报价
+  state.trade=null;state.haggleMode=false;state.shop=null;state.haggleCount=0;
+  state.jobOffer=null;
+  hideChatInput();
+}
+function chooseOption(idx){
+  var d=state.dialog;if(!d)return;
+  if(d.endAfterTyping)return;
+  if(!d.options||idx<0||idx>=d.options.length)return;
+  var opt=d.options[idx],npc=d.npc;
+  npc.history.push({role:'player',text:opt});
+  npc.history=npc.history.slice(-8);
+  emitEvent({type:'dialog_choice',npcId:npc.id,choice:opt,t:state.time});
+  if(opt==='离开'){closeDialog();return}
+  if(d.aiResult&&d.aiResult.end){closeDialog();return}
+  // ---- 工程二选一（入口常驻；两个方案只在工程报价对话框开着时才认） ----
+  var jb=JOB_DEFS[npc.id];
+  if(jb){
+    if(opt===jb.entry){openJobOffer(npc);return}
+    if(state.jobOffer&&state.jobOffer.npc===npc){
+      if(opt===jb.high.label){takeJob(npc,'high');return}
+      if(opt===jb.low.label){takeJob(npc,'low');return}
+    }
+  }
+  // ---- 商店流程优先 ----
+  if(state.shop){handleShopChoice(npc,opt);return}
+  // ---- 交易进行中的选项 ----
+  if(state.trade){
+    if(opt==='接受价格'||opt==='接受反价'){settleTrade(npc,opt);return}
+    if(opt==='砍价'||opt==='再砍价'){enterHaggle(npc);return}
+    if(opt==='不买了'||opt==='不卖了'){state.trade=null;state.haggleMode=false}
+  }
+  // ---- 打开买卖 / 送礼入口 ----
+  if(opt==='买东西'){openShop(npc,'buy');return}
+  if(opt==='卖东西'){openShop(npc,'sell');return}
+  if(opt==='送东西'){openGift(npc);return}
+  sendDialogTurn(npc,opt,null);
+}
+function settleTrade(npc,opt){
+  var tr=state.trade;
+  var total=tr.ask*tr.qty;
+  var haggled=!!tr.countered||opt==='接受反价';
+  if(tr.direction==='buy'){
+    if(state.money<total){
+      state.trade=null;state.haggleMode=false;state.haggleCount=0;
+      addFloat('金币不够',player.x+player.w/2,player.y-8,'#ff6b6b');
+      sendDialogTurn(npc,'我钱不够',null);
+      return;
+    }
+    state.money-=total;
+    state.bag[tr.item]=(state.bag[tr.item]||0)+tr.qty;
+    addFloat('-'+total+' 金币   +'+tr.qty+' '+tr.itemName,player.x+player.w/2,player.y-8,'#ff9f43');
+  }else{
+    if((state.bag[tr.item]||0)<tr.qty){
+      state.trade=null;state.haggleMode=false;state.haggleCount=0;
+      addFloat('你没有那么多货',player.x+player.w/2,player.y-8,'#ff6b6b');
+      sendDialogTurn(npc,'我货不够',null);
+      return;
+    }
+    state.bag[tr.item]=(state.bag[tr.item]||0)-tr.qty;
+    state.money+=total;
+    addFloat('+'+total+' 金币   -'+tr.qty+' '+tr.itemName,player.x+player.w/2,player.y-8,'#ffd700');
+  }
+  // 结局道德值：市场砍价属于正常商业行为，不再计入 greed；爽快成交仍计 honest
+  if(!haggled)state.honest++;
+  state.trade=null;state.haggleMode=false;state.haggleCount=0;
+  if(state.money>=GOAL){closeDialog();startEnding();return}
+  sendDialogTurn(npc,'成交了',null);
+}
+function applyAction(action){
+  if(!action||action.type==='none')return;
+  if(action.type==='give'){
+    state.money=Math.min(GOAL,state.money+action.money);
+    addFloat('+'+action.money+' 金币',player.x+player.w/2,player.y-8,'#ffd700');
+  }else if(action.type==='take'){
+    state.energy=Math.max(1,state.energy-action.energy);
+  }else if(action.type==='warp'){
+    if(SCENES[action.scene]){state.scene=action.scene;player.x=W/2;player.y=H/2;camera.shake(4)}
+  }
+}
+
+/* ============ §14 休息 ============ */
+function doSleep(){
+  if(state.inputLocked)return;
+  state.inputLocked=true;
+  addFloat('Zzz...',player.x+player.w/2,player.y-20,'#7bd7ff');
+  var from=state.energy;
+  anim.tween({from:from,to:state.maxEnergy,dur:0.7,ease:Ease.outCubic,
+    onUpdate:function(v){state.energy=v}});
+  particles.emitMany(6,function(){return {
+    x:player.x+player.w/2+(Math.random()-0.5)*30,
+    y:player.y+(Math.random()-0.5)*20,
+    vx:(Math.random()-0.5)*20,vy:-30-Math.random()*20,
+    life:1.2,size:3+Math.random()*2,color:'#7bd7ff',blend:'lighter'
+  }});
+  setTimeout(function(){state.inputLocked=false},800);
+  advanceDay();
+}
+// 睡觉推进天数：天数 +1、重置「每日」标记（邻居每日剧情靠它），并飘一行提示
+function advanceDay(){
+  state.day++;
+  state.dailyDone={};
+  resetFamilyNPCs();   // §22：新的一天，4 人从各自家里重新开始（否则会停在上一天去的市场/工地）
+  addFloat('📅 第 '+state.day+' 天',player.x+player.w/2,player.y-38,'#ffd700');
+  // 到期的工程回款（高标准路线：慢，但干净）
+  var rest=[];
+  for(var i=0;i<state.jobs.length;i++){
+    var jb=state.jobs[i];
+    if(jb.finishDay<=state.day){
+      state.money+=jb.payout;
+      addFloat('💰 工程回款 +'+jb.payout,player.x+player.w/2,player.y-62,'#ffd700');
+      emitEvent({type:'job_done',greedy:false,id:jb.kind,t:state.time});
+      if(state.money>=GOAL){startEnding();return}
+    }else rest.push(jb);
+  }
+  state.jobs=rest;
+}
+// 吃一颗橘子糖：恢复精力（糖只能吃或送给小女孩）
+function eatCandy(){
+  if((state.bag.candy||0)<=0){addFloat('没有糖了',player.x+player.w/2,player.y-8,'#ff6b6b');return}
+  if(state.energy>=state.maxEnergy){addFloat('精力已经满了',player.x+player.w/2,player.y-8,'#ffd700');return}
+  state.bag.candy--;
+  var to=Math.min(state.maxEnergy,state.energy+25);
+  anim.tween({from:state.energy,to:to,dur:0.4,ease:Ease.outCubic,
+    onUpdate:function(v){state.energy=v}});
+  addFloat('🍬 精力 +25',player.x+player.w/2,player.y-20,'#ff9ec4');
+}
+
+/* ============ §14.5 邻居家：每日一次强制剧情 ============ */
+// 触发区：邻居家左侧门洞前方的路上（邻居家贴图现在贴在 (960,190,512,512)，门洞约在世界 y405~441）
+var NEIGHBOR_ZONE={x:850,y:390,w:110,h:110};
+var neighborZoneArmed=true;
+// 每日剧情片段（本地固定，不依赖 AI：离线也能播、内容可复现、伏笔可控）
+// 每条 = {who:说话人, text:台词}；数组按天数取，取完循环
+var NEIGHBOR_STORY=[
+  [ {who:'小女孩',text:'奶奶奶奶，今天有橘子糖吗？'},
+    {who:'奶奶',text:'有，给你留着呢。'},
+    {who:'奶奶',text:'哎，你也来了。拿着路上吃，别嫌少。'},
+    {who:'小女孩',text:'哥哥放学回来，说学校可好玩了！'} ],
+  [ {who:'哥哥',text:'奶奶，今天老师夸我算得快。'},
+    {who:'奶奶',text:'好孩子。好好念，念出名堂来。'},
+    {who:'哥哥',text:'等我上中学，就去镇上那所新学校。'} ],
+  [ {who:'爸爸',text:'工地上谈妥了，活儿紧，工期赶得凶。'},
+    {who:'爸爸',text:'工钱给得不赖，干完这趟，家里就能宽裕点。'},
+    {who:'奶奶',text:'少逞能，家里人等你吃饭。'} ],
+  [ {who:'爸爸',text:'工头说了，只要盖得快，安全措施能省就省。'},
+    {who:'爸爸',text:'别人都这么干，不差我一个。'},
+    {who:'奶奶',text:'……你自个儿当心点。'} ],
+  [ {who:'小女孩',text:'叔叔，我哥哥以后是不是要去那个新学校上学呀？'},
+    {who:'小女孩',text:'那我也要去！我跟哥哥一块儿去！'} ],
+  [ {who:'爸爸',text:'工程款结了一半，进度快得很。'},
+    {who:'哥哥',text:'我们学校那栋新楼，盖得可快了。'},
+    {who:'奶奶',text:'快是快，我这心里总不踏实。'} ]
+];
+// 玩家做降低安全标准的选择后，第 6 天起的片段换成这一套（结论：因果闭环）
+var NEIGHBOR_STORY_GREED=[
+  [ {who:'奶奶',text:'你最近脸色不好……那工地上，你也要当心。'},
+    {who:'爸爸',text:'工头催得紧，这几天都在赶工。'} ],
+  [ {who:'爸爸',text:'混凝土还没干透就往上砌了，省时间。'},
+    {who:'奶奶',text:'夜里别去了，我总觉得心慌。'} ]
+];
+// 取「今天该播哪一段」
+function pickNeighborStory(){
+  var pack=(state.safetyCut?NEIGHBOR_STORY_GREED:NEIGHBOR_STORY);
+  return pack[(state.day-1)%pack.length];
+}
+// 每帧检测：玩家中心点进入触发区且今天还没触发 → 播当日剧情
+function checkNeighborStory(){
+  if(state.scene!=='world'||state.mode!=='play'||state.story||state.dialog)return;
+  var cx=player.x+player.w/2,cy=player.y+player.h/2;
+  var inZone=cx>NEIGHBOR_ZONE.x&&cx<NEIGHBOR_ZONE.x+NEIGHBOR_ZONE.w&&
+             cy>NEIGHBOR_ZONE.y&&cy<NEIGHBOR_ZONE.y+NEIGHBOR_ZONE.h;
+  if(!inZone){neighborZoneArmed=true;return}        // 走出区域 → 重新武装
+  if(!neighborZoneArmed||state.dailyDone.neighbor)return;
+  neighborZoneArmed=false;
+  state.dailyDone.neighbor=true;
+  startStory(pickNeighborStory(),'邻居家');
+}
+// 播放一段强制剧情（底部字幕框，点一下推进一句；最后一句出现「继续赶路」）
+function startStory(lines,title){
+  state.story={lines:lines.slice(),title:title||'',index:0,charIndex:0,charTimer:0};
+  state.isMoving=false;
+  updatePlayerAnim(0,false);
+  emitEvent({type:'neighbor_story',day:state.day,t:state.time});
+}
+function advanceStory(){
+  var s=state.story;if(!s)return;
+  var full=s.lines[s.index]?s.lines[s.index].text:'';
+  if(s.charIndex<full.length){s.charIndex=full.length;return}   // 第一次点：整句显示
+  if(s.index<s.lines.length-1){s.index++;s.charIndex=0;s.charTimer=0;return}
+  state.story=null;                                             // 最后一句点完 → 解锁
+}
+function updateStory(dt){
+  var s=state.story;if(!s)return;
+  var full=s.lines[s.index]?s.lines[s.index].text:'';
+  if(s.charIndex<full.length){
+    s.charTimer+=dt;
+    while(s.charIndex<full.length&&s.charTimer>0.028){s.charTimer-=0.028;s.charIndex++}
+  }
+}
+
+/* ============ §15 场景切换 ============ */
+function startSceneTransition(door){
+  state.inputLocked=true;
+  state.sceneTransition={t:0,dur:1.0,toScene:door.to,spawn:door.spawn,switched:false};
+  emitEvent({type:'scene_change',to:door.to,t:state.time});
+}
+function updateSceneTransition(dt){
+  var st=state.sceneTransition;if(!st)return;
+  st.t+=dt;
+  var half=st.dur*0.5;
+  if(!st.switched&&st.t>=half){
+    st.switched=true;
+    state.scene=st.toScene;
+    var safe=safeSpawn(st.toScene,st.spawn);
+    player.x=safe.x;player.y=safe.y;
+    player.walkPhase=0;player.bobY=0;
+    if(camera.snap)camera.snap();          // 切场景后镜头立即到位，避免滑动
+    var pcx=player.x+player.w/2,pcy=player.y+player.h/2;
+    particles.emitMany(12,function(){return {
+      x:pcx+(Math.random()-0.5)*320,
+      y:pcy+(Math.random()-0.5)*220,
+      vx:(Math.random()-0.5)*40,vy:-30-Math.random()*40,
+      life:0.8,size:3+Math.random()*3,
+      color:SCENES[state.scene].accent,blend:'lighter'
+    }});
+  }
+  if(st.t>=st.dur){
+    state.sceneTransition=null;state.inputLocked=false;state.doorCooldown=0.5;
+  }
+}
+function drawSceneTransition(){
+  var st=state.sceneTransition;if(!st)return;
+  var half=st.dur*0.5;
+  var alpha=st.t<half?(st.t/half):Math.max(0,1-(st.t-half)/half);
+  ctx.fillStyle='rgba(0,0,0,'+alpha+')';
+  ctx.fillRect(0,0,W,H);
+}
+
+/* ============ §16 玩家 & NPC 动画 ============ */
+function updatePlayerAnim(dt,isMoving){
+  if(isMoving){
+    player.idleBlend=Math.min(1,player.idleBlend+dt*8);
+    player.walkPhase+=dt*0.93;   // 与 6 帧走路同周期：6×0.18s=1.08s 一个完整步态（原来的 7.5 会让起伏抖到 15Hz）
+  }else{
+    player.idleBlend=Math.max(0,player.idleBlend-dt*6);
+    player.walkPhase+=dt*0.93*player.idleBlend;
+  }
+  var p=player.walkPhase*Math.PI*2;
+  // 起伏峰值对齐步态里的"并腿/抬腿"帧（第2、5帧），每步一次 ≈1.85Hz：sin(2p - 5π/6)
+  player.bobY=Math.sin(p*2-5*Math.PI/6)*2.2*player.idleBlend;
+  player.legSwing=Math.sin(p)*0.55*player.idleBlend;
+  var targetLean=player.dir==='left'?-3:player.dir==='right'?3:0;
+  player.lean=expLerp(player.lean,targetLean,8,dt);
+}
+function updateNPCBlink(n,dt){
+  n.blinkTimer-=dt;
+  if(n.blinkTimer<=0){
+    n.blinkTimer=2.4+Math.random()*2.2;
+    n.blinking=true;n.blinkPhase=0;
+  }
+  if(n.blinking){
+    n.blinkPhase+=dt;
+    var total=0.21;
+    if(n.blinkPhase>=total){n.blinking=false;n.blinkAmount=1}
+    else{
+      var p=n.blinkPhase;
+      if(p<0.06)n.blinkAmount=1-p/0.06;
+      else if(p<0.14)n.blinkAmount=0;
+      else n.blinkAmount=(p-0.14)/0.07;
+    }
+  }else n.blinkAmount=1;
+  if(n.emotionTimer>0)n.emotionTimer-=dt;
+}
+function updateAllNPCs(dt){
+  var npcs=SCENES[state.scene].npcs||[];
+  for(var i=0;i<npcs.length;i++)updateNPCBlink(npcs[i],dt);
+  updateNPCRoutines(dt);   // §22：邻居家 4 人的踱步 / 每日出门
+}
+
+/* ============ §17 过场 CG ============ */
+var CUTSCENES={
+  tragic:[
+    {caption:'工地。钢筋断裂的声音，像一声长长的叹息。',sub:'安全网前一天被抽走了——省下的那点钱，换走了一条命。',draw:drawCG_Collapse},
+    {caption:'学校。新盖的教学楼，墙皮像纸一样剥落。',sub:'水泥没干透就往上砌，哥哥被埋在了废墟里，课本散了一地。',draw:drawCG_School},
+    {caption:'小女孩站在门口，手里还攥着那颗橘子糖。',sub:'她哭了很久很久。',draw:drawCG_GirlCry,
+     ask:'叔叔，我爸爸和哥哥去哪里了？'},
+    {caption:'奶奶站在阴影里，冷冷地看着你。',sub:'她什么都没说。她什么都知道了。',draw:drawCG_Grandma}
+  ],
+  happy:[
+    {caption:'你诚实劳动的每一天，都变成了实实在在的砖瓦。',sub:'钱不多，但每一枚都干干净净。',draw:drawCG_HonestWork},
+    {caption:'市场的水果摊，学校的孩子，都认识了你。',sub:'他们笑着跟你打招呼。',draw:drawCG_HappyMarket},
+    {caption:'傍晚，你回到家。爸爸、哥哥、奶奶和小女孩都在。',sub:'桌上有热腾腾的饭菜。',draw:drawCG_HappyHome}
+  ]
+};
+
+function startEnding(){
+  // 结局：只要在工地/学校主动选过「降低安全标准」→ 悲剧；否则 美满
+  state.endingType=state.safetyCut?'tragic':'happy';
+  state.mode='cutscene';
+  state.cutscene={type:state.endingType,phase:0,t:0};
+  camera.zoom=1;
+}
+function cgBg(c1,c2){
+  var g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,c1);g.addColorStop(1,c2);
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
+function drawCG_Collapse(){
+  cgBg('#1a1210','#2a1a10');
+  ctx.strokeStyle='#5a4a3a';ctx.lineWidth=8;
+  for(var i=0;i<10;i++){
+    ctx.beginPath();ctx.moveTo(100+i*80,H-100);
+    ctx.lineTo(180+i*80,120+Math.sin(i)*60);ctx.stroke();
+  }
+  // 立绘：工地上那个为省安全费没做防护的爸爸——「换走的那条命」，就是他
+  var pw=230,ph=310;
+  drawPortraitArt('dad','sad',W/2-pw/2,H*0.20,pw,ph);
+  for(var j=0;j<40;j++){
+    var t=(state.time*0.6+j*0.3)%1;
+    ctx.fillStyle='rgba(180,150,120,'+((1-t)*0.35)+')';
+    ctx.beginPath();ctx.arc(200+((j*97)%560),500-t*420,20+t*70,0,6.283);ctx.fill();
+  }
+}
+function drawCG_School(){
+  cgBg('#1a1a2a','#2a1a2a');
+  ctx.save();ctx.translate(W/2,H/2+60);ctx.rotate(-0.14);
+  ctx.fillStyle='#2a3a4a';ctx.fillRect(-320,-260,640,420);
+  ctx.fillStyle='#6cb8ff';
+  for(var r=0;r<4;r++)for(var c=0;c<6;c++){
+    ctx.globalAlpha=((r*6+c)%3!==0)?0.35:0.1;
+    ctx.fillRect(-290+c*100,-220+r*80,60,46);
+  }
+  ctx.globalAlpha=1;ctx.restore();
+  // 立绘：教学楼塌下来时，哥哥还在里面——含泪的那张脸
+  var pw=230,ph=310;
+  drawPortraitArt('xiaoyu','sad',W/2-pw/2,H*0.20,pw,ph);
+  for(var i=0;i<14;i++){
+    ctx.save();
+    ctx.translate(120+(i*67)%720,H-120-((i*41)%60));
+    ctx.rotate((i%2?1:-1)*(0.2+(i%5)*0.1));
+    ctx.fillStyle=['#e74c3c','#3498db','#2ecc71','#f1c40f'][i%4];
+    ctx.fillRect(-22,-14,44,28);ctx.restore();
+  }
+}
+function drawCG_GirlCry(){
+  cgBg('#2a1a24','#3a1a2a');
+  var g=ctx.createRadialGradient(W/2,H*0.55,20,W/2,H*0.55,380);
+  g.addColorStop(0,'rgba(255,180,200,0.35)');
+  g.addColorStop(1,'rgba(255,180,200,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // 哭着的立绘（闭眼 + 泪痕），配不停落下的泪珠
+  var pw=250,ph=330,cx=W/2;
+  drawPortraitArt('girl','cry',cx-pw/2,H*0.30,pw,ph);
+  var cy=H*0.30+ph*0.55;
+  for(var i=0;i<8;i++){
+    var t=(state.time*1.2+i*0.25)%1;
+    ctx.fillStyle='rgba(120,200,255,'+(1-t)+')';
+    ctx.beginPath();ctx.arc(cx-24+(i%2)*48,cy+t*130,4,0,6.283);ctx.fill();
+  }
+}
+function drawCG_Grandma(){
+  cgBg('#0a0a14','#1a0a14');
+  var g=ctx.createRadialGradient(W/2,H*0.4,40,W/2,H*0.4,520);
+  g.addColorStop(0,'rgba(120,140,180,0.22)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // 冷眼特写：眯眼 + 平直嘴的立绘放大居中
+  var pw=320,ph=430;
+  drawPortraitArt('grandma','cold',W/2-pw/2,H*0.05,pw,ph);
+  var v=ctx.createLinearGradient(0,0,0,H);
+  v.addColorStop(0,'rgba(0,0,0,0.55)');v.addColorStop(0.45,'rgba(0,0,0,0)');
+  v.addColorStop(1,'rgba(0,0,0,0.75)');
+  ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+}
+function drawCG_HonestWork(){
+  cgBg('#ff9a55','#ffd28a');
+  ctx.fillStyle='#fff4c2';
+  ctx.beginPath();ctx.arc(W/2,H*0.55,110,0,6.283);ctx.fill();
+  ctx.fillStyle='rgba(80,50,30,0.7)';ctx.fillRect(0,H*0.72,W,H*0.28);
+  for(var i=0;i<12;i++){
+    var t=(state.time*0.7+i*0.4)%1;
+    ctx.globalAlpha=1-t;ctx.fillStyle='#fff3a0';
+    ctx.beginPath();ctx.arc(120+(i*83)%720,H*0.3-t*160+Math.sin(state.time+i)*10,3,0,6.283);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+function drawCG_HappyMarket(){
+  cgBg('#a0e8ff','#ffe8a0');
+  for(var i=0;i<3;i++){
+    var x=120+i*280;
+    ctx.fillStyle='#c14a2a';ctx.fillRect(x,250,220,20);
+    ctx.fillStyle='#8b5a2b';ctx.fillRect(x,270,220,130);
+    var cols=['#ff5a5a','#ffb84a','#7bd7ff','#8be28b','#ff9ec4'];
+    for(var j=0;j<10;j++){
+      ctx.fillStyle=cols[(i*3+j)%cols.length];
+      ctx.beginPath();ctx.arc(x+20+(j%5)*42,240-Math.floor(j/5)*22,14,0,6.283);ctx.fill();
+    }
+  }
+}
+function drawCG_HappyHome(){
+  cgBg('#3a2a1a','#6a4a2a');
+  ctx.fillStyle='#4a3520';ctx.fillRect(0,H*0.62,W,H*0.38);
+  ctx.fillStyle='#8b5a2b';
+  ctx.fillRect(300,380,360,22);ctx.fillRect(320,402,16,80);ctx.fillRect(624,402,16,80);
+  var people=[{x:200,c:'#7fb3ff'},{x:330,c:'#8be28b'},{x:620,c:'#ff9ec4'},{x:760,c:'#b8b8c8'}];
+  for(var i=0;i<people.length;i++){
+    var p=people[i];
+    ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,460,24,0,6.283);ctx.fill();
+    ctx.fillRect(p.x-24,480,48,80);
+  }
+  ctx.fillStyle='#9fe8ff';
+  ctx.beginPath();ctx.arc(480,460,28,0,6.283);ctx.fill();
+  ctx.fillRect(452,484,56,84);
+  var g=ctx.createRadialGradient(W/2,H*0.5,60,W/2,H*0.5,600);
+  g.addColorStop(0,'rgba(255,220,150,0.25)');g.addColorStop(1,'rgba(255,220,150,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
+function drawCutscene(){
+  var cs=state.cutscene;
+  var phases=CUTSCENES[cs.type];
+  var phase=phases[Math.min(cs.phase,phases.length-1)];
+  phase.draw();
+  ctx.fillStyle='#000';ctx.fillRect(0,0,W,70);ctx.fillRect(0,H-150,W,150);
+  var t=cs.t,alpha=1;
+  if(t<0.5)alpha=t/0.5;
+  if(t>3.1)alpha=Math.max(0,(3.6-t)/0.5);
+  ctx.globalAlpha=alpha;
+  ctx.font='bold 26px "Microsoft YaHei"';ctx.fillStyle='#fff';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowColor='rgba(0,0,0,0.9)';ctx.shadowBlur=8;
+  ctx.fillText(phase.caption,W/2,H-105);
+  ctx.font='19px "Microsoft YaHei"';ctx.fillStyle='rgba(220,220,240,0.85)';
+  ctx.fillText(phase.sub,W/2,H-62);
+  // 循环追问（悲剧第 3 幕）：一闪一闪，像问不完
+  if(phase.ask){
+    var blink=(Math.sin(state.time*4)+1)/2;
+    ctx.font='bold 22px "Microsoft YaHei"';
+    ctx.fillStyle='rgba(255,158,196,'+(0.45+blink*0.55)+')';
+    ctx.shadowColor='rgba(255,120,180,0.85)';ctx.shadowBlur=14;
+    ctx.fillText(phase.ask,W/2,H-24);
+    ctx.shadowBlur=0;
+  }
+  ctx.shadowBlur=0;ctx.globalAlpha=1;
+  ctx.font='14px "Microsoft YaHei"';ctx.fillStyle='rgba(255,215,0,0.5)';
+  ctx.textAlign='right';
+  ctx.fillText(isTouch?'点击跳过  ('+(cs.phase+1)+'/'+phases.length+')'
+                     :'按 [空格] 跳过  ('+(cs.phase+1)+'/'+phases.length+')',W-30,40);
+}
+
+/* ============ §18 更新 ============ */
+function processActions(){
+  while(actionQueue.length){
+    var a=actionQueue.shift();
+    if(a==='restart'){restartGame();continue}
+    if(state.story){                    // 强制剧情播放中：点击只推进剧情，不触发别的交互
+      if(a==='confirm')advanceStory();
+      continue;
+    }
+    if(state.mode==='dialog'){
+      if(a==='confirm')advanceDialog();
+      else if(a.indexOf('opt')===0)chooseOption(parseInt(a.slice(3),10));
+    }else if(state.mode==='play'){
+      if(a==='interact')tryInteract();
+    }else if(state.mode==='cutscene'){
+      if(a==='confirm'){
+        state.cutscene.t=0;state.cutscene.phase++;
+        if(state.cutscene.phase>=CUTSCENES[state.cutscene.type].length){
+          state.mode='victory';state.time=0;
+          for(var i=0;i<150;i++){
+            particles.emit({x:Math.random()*W,y:Math.random()*H,
+              vx:(Math.random()-0.5)*60,vy:60+Math.random()*120,
+              life:3,size:8+Math.random()*10,
+              color:['#ffd700','#ffe66d','#ffb700','#fff3a0'][Math.floor(Math.random()*4)],
+              shape:Math.random()<0.5?'rect':'star'});
+          }
+        }
+      }
+    }
+  }
+}
+function movePlayer(dt){
+  if(state.inputLocked||state.story||markMode){updatePlayerAnim(dt,false);state.isMoving=false;return}
+  var kx=0,ky=0;
+  if(keys['KeyW']||keys['ArrowUp'])ky-=1;
+  if(keys['KeyS']||keys['ArrowDown'])ky+=1;
+  if(keys['KeyA']||keys['ArrowLeft'])kx-=1;
+  if(keys['KeyD']||keys['ArrowRight'])kx+=1;
+  var jx=0,jy=0;
+  if(touchState.joystick.active){jx=touchState.joystick.dx;jy=touchState.joystick.dy}
+  var dx=kx+jx,dy=ky+jy,mag=Math.hypot(dx,dy);
+  if(mag<0.15){state.isMoving=false;updatePlayerAnim(dt,false);return}
+  state.isMoving=true;updatePlayerAnim(dt,true);
+  dx/=mag;dy/=mag;
+  var scene=SCENES[state.scene],step=PLAYER_SPEED*dt;
+  if(!isFree(player.x,player.y,scene)){
+    // 逃生规则：玩家当前站的位置本身已经不合法（异常态，例如被 NPC 推到墙里）。
+    // 这时逐向判定会把四个方向全判死 → 只能重开；所以这一步直接放行，
+    // 只保留场景边界钳制，保证任何卡死都能自己走出来
+    var _sb=sceneBounds(scene);
+    player.x=clamp(player.x+dx*step,_sb.x+2,_sb.x+_sb.w-player.w-2);
+    player.y=clamp(player.y+dy*step,_sb.y+2,_sb.y+_sb.h-player.h-2);
+  }else{
+    var nx=player.x+dx*step;if(isFree(nx,player.y,scene))player.x=nx;
+    var ny=player.y+dy*step;if(isFree(player.x,ny,scene))player.y=ny;
+  }
+  if(Math.abs(dx)>Math.abs(dy))player.dir=dx>0?'right':'left';
+  else if(dy!==0)player.dir=dy>0?'down':'up';
+}
+function isFree(x,y,scene){
+  var b=sceneBounds(scene);
+  var r={x:x,y:y,w:player.w,h:player.h};
+  if(r.x<b.x||r.y<b.y||r.x+r.w>b.x+b.w||r.y+r.h>b.y+b.h)return false;
+  var props=scene.props||[];
+  for(var i=0;i<props.length;i++){
+    var p=props[i];if(p.solid===false)continue;
+    if(rectOverlap(r,p))return false;
+  }
+  // 不可见的实体（家的墙壁等）：有碰撞，但完全不绘制 → 碰撞盒看不见
+  var cols=scene.colliders||[];
+  for(var j=0;j<cols.length;j++){
+    if(rectOverlap(r,cols[j]))return false;
+  }
+  return true;
+}
+function checkDoors(){
+  if(state.doorCooldown>0||state.inputLocked)return;
+  var scene=SCENES[state.scene],doors=scene.doors||[];
+  for(var i=0;i<doors.length;i++){
+    if(rectOverlap(player,doors[i])){startSceneTransition(doors[i]);return}
+  }
+}
+// 每帧只挑一个"可以交谈"的邻居：与玩家身体重叠、且过了冷却。
+// 不再自动开对话（是否交谈交给玩家按 F 决定），所以这里也不推挤玩家、不打断任何人行程
+function checkNPCs(dt){
+  if(state.inputLocked){state.talkTarget=null;return}
+  var scene=SCENES[state.scene],npcs=scene.npcs||[],target=null;
+  for(var i=0;i<npcs.length;i++){
+    var n=npcs[i];
+    if(n.cooldown>0){n.cooldown-=dt;continue}
+    if(!target&&rectOverlap(player,n))target=n;
+  }
+  state.talkTarget=target;
+}
+function updateEnergy(dt){
+  if(state.isMoving&&!state.inputLocked)state.energy-=ENERGY_DRAIN*dt;
+  if(state.energy<=0){state.energy=0;if(state.mode==='play')state.mode='dead'}
+}
+function getNearbyInteraction(){
+  var scene=SCENES[state.scene];
+  if(!scene.interactions)return null;
+  var px=player.x+player.w/2,py=player.y+player.h/2;
+  for(var i=0;i<scene.interactions.length;i++){
+    var it=scene.interactions[i];
+    if(px>=it.x&&px<=it.x+it.w&&py>=it.y&&py<=it.y+it.h)return it;
+  }
+  return null;
+}
+function tryInteract(){
+  if(state.inputLocked)return;
+  var it=getNearbyInteraction();
+  if(it&&typeof it.action==='function')it.action();
+}
+// 玩家按 F：与身上重叠的 NPC 开始交谈。
+// 推开逻辑沿用原来自动触发时那套（并保持墙安全：推开后若落进墙里就退回原位，再钳场景边界）
+function tryTalk(){
+  var n=state.talkTarget;
+  if(!n||state.inputLocked||state.mode!=='play')return;
+  var scene=SCENES[state.scene];
+  state.talkTarget=null;
+  n.cooldown=3;
+  var _px=player.x,_py=player.y;
+  pushOut(player,n);
+  if(!isFree(player.x,player.y,scene)){player.x=_px;player.y=_py}
+  var _b=sceneBounds(scene);
+  player.x=clamp(player.x,_b.x+2,_b.x+_b.w-player.w-2);
+  player.y=clamp(player.y,_b.y+2,_b.y+_b.h-player.h-2);
+  startNPCDialog(n);
+}
+function updateFloats(dt){
+  for(var i=state.floats.length-1;i>=0;i--){
+    var f=state.floats[i];
+    f.life-=dt;f.y-=42*dt;
+    f.scale=Math.min(1,f.scale+dt*6);
+    if(f.life<=0)state.floats.splice(i,1);
+  }
+}
+function restartGame(){
+  state.mode='play';state.scene='world';
+  state.money=START_MONEY;state.displayMoney=START_MONEY;
+  state.energy=state.maxEnergy;
+  state.greed=0;state.honest=0;state.time=0;state.day=1;state.dailyDone={};state.story=null;
+  state.safetyCut=false;state.jobs=[];state.jobOffer=null;
+  state.doorCooldown=0;
+  state.dialog=null;state.cutscene=null;state.endingType=null;
+  state.floats.length=0;state.events.length=0;
+  state.bag={brick:0,cement:0,helmet:0,candy:0,scaffold:0,cigarette:0,wine:0};
+  state.trade=null;state.haggleMode=false;state.shop=null;state.showBag=false;state.haggleCount=0;
+  state.isMoving=false;state.inputLocked=false;state.sceneTransition=null;
+  player.x=300;player.y=350;player.dir='right';
+  player.walkPhase=0;player.bobY=0;player.legSwing=0;player.idleBlend=0;
+  touchState.joystick.active=false;touchState.joystick.dx=0;touchState.joystick.dy=0;
+  camera.zoom=1;camera.shakeAmp=0;camera.x=0;camera.y=0;
+  anim.clear();particles.clear();
+  for(var k in SCENES){
+    var npcs=SCENES[k].npcs||[];
+    for(var i=0;i<npcs.length;i++){
+      var n=npcs[i];
+      n.cooldown=0;n.trust=0;n.history=[];
+      n.emotion='neutral';n.talking=false;
+    }
+  }
+  resetFamilyNPCs();   // §22：重开一局，邻居 4 人回到各自家里
+}
+/* ============ §14.7 BGM（背景音乐 · 仅大地图无缝循环） ============ */
+var BGM_SRC='music/piano_bgm_75bpm_loop.mp3';   // 背景音乐文件。把文件放到这个路径即生效；文件缺失时静默跳过，不影响游戏
+var BGM_VOLUME=0.35;                  // 默认音量（不盖过对话）
+var BGM_LS_KEY='coins_of_100_bgm_muted';
+var bgm={el:null,muted:false,failed:false};
+(function initBGM(){
+  try{ bgm.muted=(localStorage.getItem(BGM_LS_KEY)==='1'); }catch(e){}
+  try{
+    var a=new Audio();
+    a.src=BGM_SRC;a.loop=true;a.preload='auto';a.volume=BGM_VOLUME;
+    a.addEventListener('error',function(){
+      if(bgm.failed)return;
+      bgm.failed=true;
+      console.log('[BGM] 背景音乐加载失败（文件缺失或格式不支持）：'+BGM_SRC+' —— 不影响游戏');
+    });
+    bgm.el=a;
+  }catch(e){ bgm.failed=true; }
+})();
+// 该不该响：只在世界大地图（非市场/工地/学校），且游戏已开始、未静音、未到结局
+function bgmWantPlay(){
+  if(bgm.failed||bgm.muted)return false;
+  if(!gameStarted)return false;
+  if(state.scene!=='world')return false;
+  if(state.mode==='victory'||state.mode==='dead')return false;
+  return true;
+}
+// 让实际播放状态对齐目标状态（每帧调用，只在需要变化时才动作）
+function bgmSync(){
+  if(!bgm.el||bgm.failed)return;
+  if(bgmWantPlay()){
+    if(bgm.el.paused){
+      var p=bgm.el.play();
+      if(p&&p.catch)p.catch(function(){});   // 被浏览器自动播放策略拦截 / 文件缺失：静默跳过
+    }
+  }else if(!bgm.el.paused){
+    bgm.el.pause();
+  }
+}
+function toggleBGM(){
+  bgm.muted=!bgm.muted;
+  try{ localStorage.setItem(BGM_LS_KEY,bgm.muted?'1':'0'); }catch(e){}
+  bgmSync();
+  addFloat(bgm.muted?'🔇 背景音乐已关闭':'🎵 背景音乐已开启',player.x+player.w/2,player.y-38,'#a8c6ff');
+}
+function update(dt){
+  bgmSync();
+  // 开局角色创建阶段：世界只做背景动效，不跑玩法逻辑
+  if(state.mode==='intro'){
+    state.time+=dt;anim.update(dt);particles.update(dt);updateFloats(dt);
+    return;
+  }
+  state.time+=dt;
+  if(markMode)panCameraInMarkMode(dt);else camera.update(dt);   // 标记模式下角色不动，改为平移镜头
+  anim.update(dt);
+  particles.update(dt);
+  updateFloats(dt);
+  updateSceneTransition(dt);
+  processActions();
+  if(state.mode==='dialog'){updateDialog(dt);return}
+  if(state.mode==='cutscene'){
+    var cs=state.cutscene;cs.t+=dt;
+    camera.zoom=1+Math.min(0.06,cs.t*0.02);
+    if(cs.t>3.6){
+      cs.t=0;cs.phase++;
+      if(cs.phase>=CUTSCENES[cs.type].length){
+        state.mode='victory';state.time=0;camera.zoom=1;
+        for(var i=0;i<150;i++){
+          particles.emit({x:Math.random()*W,y:Math.random()*H,
+            vx:(Math.random()-0.5)*60,vy:60+Math.random()*120,
+            life:3,size:8+Math.random()*10,
+            color:['#ffd700','#ffe66d','#ffb700','#fff3a0'][Math.floor(Math.random()*4)],
+            shape:Math.random()<0.5?'rect':'star'});
+        }
+      }
+    }
+    return;
+  }
+  if(state.mode==='victory'||state.mode==='dead')return;
+  if(state.doorCooldown>0)state.doorCooldown-=dt;
+  state.displayMoney=expLerp(state.displayMoney,state.money,8,dt);
+  movePlayer(dt);
+  checkNeighborStory();
+  updateStory(dt);
+  checkDoors();
+  checkNPCs(dt);
+  updateEnergy(dt);
+  updateAllNPCs(dt);
+}
+
+/* ============ §19 渲染 ============ */
+function drawScene(){
+  var s=SCENES[state.scene];
+  // 粉框（调试记号）只在标记模式里画：正常玩的时候画面上一个粉框都没有
+  if(s.isWorld){drawWorldScene();if(debugColliders)drawDebugColliders();if(markMode)drawUserMarks();return}      // 大地图：五张场景贴图拼在同一张世界画布上
+  var bg=s.bgImage;
+  if(bg&&bg.complete&&bg.naturalWidth>0){
+    // 使用背景图铺满（cover，保持比例、不拉伸）
+    var iw=bg.naturalWidth,ih=bg.naturalHeight;
+    var sc=Math.max(W/iw,H/ih);
+    ctx.drawImage(bg,(W-iw*sc)/2,(H-ih*sc)/2,iw*sc,ih*sc);
+    ctx.fillStyle='rgba(8,8,16,0.18)';ctx.fillRect(0,0,W,H);
+  }else{
+    ctx.fillStyle=s.wallColor;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=s.floorColor;ctx.fillRect(WALL,WALL,W-WALL*2,H-WALL*2);
+    ctx.strokeStyle='rgba(255,255,255,0.035)';ctx.lineWidth=1;
+    for(var x=WALL;x<=W-WALL;x+=60){
+      ctx.beginPath();ctx.moveTo(x,WALL);ctx.lineTo(x,H-WALL);ctx.stroke();
+    }
+    for(var y=WALL;y<=H-WALL;y+=60){
+      ctx.beginPath();ctx.moveTo(WALL,y);ctx.lineTo(W-WALL,y);ctx.stroke();
+    }
+  }
+  var doors=s.doors||[];
+  for(var i=0;i<doors.length;i++){
+    var d=doors[i];
+    ctx.save();ctx.shadowColor=s.accent;ctx.shadowBlur=26;
+    ctx.fillStyle=s.accent;ctx.fillRect(d.x,d.y,d.w,d.h);ctx.restore();
+    ctx.font='bold 15px "Microsoft YaHei"';
+    ctx.fillStyle='rgba(255,255,255,0.9)';ctx.textBaseline='middle';
+    var lx,ly,align;
+    if(d.lp==='right'){lx=d.x-16;ly=d.y+d.h/2;align='right'}
+    if(d.lp==='left'){lx=d.x+d.w+16;ly=d.y+d.h/2;align='left'}
+    if(d.lp==='top'){lx=d.x+d.w/2;ly=d.y+d.h+20;align='center'}
+    if(d.lp==='bottom'){lx=d.x+d.w/2;ly=d.y-20;align='center'}
+    ctx.textAlign=align;
+    ctx.fillText(d.label,lx,ly);
+  }
+  var props=s.props||[];
+  for(var j=0;j<props.length;j++){
+    var p=props[j];
+    ctx.save();ctx.globalAlpha=p.solid===false?0.55:1;
+    ctx.fillStyle=p.color;roundRect(ctx,p.x,p.y,p.w,p.h,10);ctx.fill();ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=2;
+    roundRect(ctx,p.x,p.y,p.w,p.h,10);ctx.stroke();
+    if(p.sign){                                            // 伏笔招牌
+      ctx.save();
+      ctx.fillStyle='rgba(255,224,140,0.95)';
+      roundRect(ctx,p.x+p.w/2-62,p.y-32,124,26,6);ctx.fill();
+      ctx.strokeStyle='rgba(140,90,30,0.6)';ctx.lineWidth=2;
+      roundRect(ctx,p.x+p.w/2-62,p.y-32,124,26,6);ctx.stroke();
+      ctx.fillStyle='#7a2b2b';ctx.font='bold 15px "Microsoft YaHei"';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(p.sign,p.x+p.w/2,p.y-18);
+      ctx.restore();
+    }
+  }
+  var inters=s.interactions||[];
+  for(var k=0;k<inters.length;k++){
+    var it=inters[k];
+    ctx.save();
+    ctx.setLineDash([9,7]);ctx.lineDashOffset=-state.time*22;
+    ctx.strokeStyle='rgba(255,215,0,0.45)';ctx.lineWidth=2;
+    roundRect(ctx,it.x,it.y,it.w,it.h,12);ctx.stroke();ctx.restore();
+    ctx.save();
+    ctx.globalAlpha=0.55+Math.sin(state.time*3)*0.15;
+    ctx.font='34px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(it.icon||'⭐',it.x+it.w/2,it.y+it.h/2);ctx.restore();
+  }
+  var npcs=s.npcs||[];
+  for(var m=0;m<npcs.length;m++)drawNPC(npcs[m]);
+}
+
+/* ---- 大地图渲染：家（PNG 室内）+ 院子 + 邻居家，一张图直接走过去 ---- */
+function drawPath(x,y,w,h){
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.10)';
+  roundRect(ctx,x+3,y+4,w,h,14);ctx.fill();
+  ctx.fillStyle='#d9c9a3';
+  roundRect(ctx,x,y,w,h,14);ctx.fill();
+  ctx.strokeStyle='rgba(150,128,88,0.55)';ctx.lineWidth=2;
+  roundRect(ctx,x,y,w,h,14);ctx.stroke();
+  ctx.restore();
+}
+function drawTree(p){
+  var cx=p.x+p.w/2,cy=p.y+p.h/2;
+  ctx.fillStyle='rgba(0,0,0,0.18)';
+  ctx.beginPath();ctx.ellipse(cx,cy+p.h*0.42,p.w*0.55,p.h*0.2,0,0,6.283);ctx.fill();
+  ctx.fillStyle='#7a5230';
+  ctx.fillRect(cx-6,cy-4,12,p.h*0.5);
+  var g=ctx.createRadialGradient(cx-8,cy-12,4,cx,cy-8,p.w*0.64);
+  g.addColorStop(0,'#74c352');g.addColorStop(1,'#2f6b2a');
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(cx-8,cy-8,p.w*0.42,0,6.283);ctx.fill();
+  ctx.beginPath();ctx.arc(cx+10,cy-2,p.w*0.34,0,6.283);ctx.fill();
+  ctx.beginPath();ctx.arc(cx-2,cy-22,p.w*0.34,0,6.283);ctx.fill();
+}
+// 大地图贴图绘制：画一张场景图 + 四边柔边（把贴图边缘融进草地，消除与大地图的色差硬边）
+// fade 取值：家那张 640 的用 34；后换的 512 场景图用 18（新图边缘就是栅栏，糊太多会吃掉栅栏）
+function drawWorldImage(it){
+  var im=it.img;
+  if(im&&im.complete&&im.naturalWidth>0)ctx.drawImage(im,it.x,it.y,it.w,it.h);
+  else{ctx.fillStyle='#2a2438';ctx.fillRect(it.x,it.y,it.w,it.h)}
+  var fade=it.w>=640?34:18;
+  var gT=ctx.createLinearGradient(0,it.y,0,it.y+fade);
+  gT.addColorStop(0,'rgba(88,160,70,0.92)');gT.addColorStop(1,'rgba(88,160,70,0)');
+  ctx.fillStyle=gT;ctx.fillRect(it.x,it.y,it.w,fade);
+  var gB=ctx.createLinearGradient(0,it.y+it.h-fade,0,it.y+it.h);
+  gB.addColorStop(0,'rgba(61,124,48,0)');gB.addColorStop(1,'rgba(61,124,48,0.92)');
+  ctx.fillStyle=gB;ctx.fillRect(it.x,it.y+it.h-fade,it.w,fade);
+  var gL=ctx.createLinearGradient(it.x,0,it.x+fade,0);
+  gL.addColorStop(0,'rgba(88,160,70,0.92)');gL.addColorStop(1,'rgba(88,160,70,0)');
+  ctx.fillStyle=gL;ctx.fillRect(it.x,it.y,fade,it.h);
+  var gR=ctx.createLinearGradient(it.x+it.w-fade,0,it.x+it.w,0);
+  gR.addColorStop(0,'rgba(74,140,56,0)');gR.addColorStop(1,'rgba(74,140,56,0.92)');
+  ctx.fillStyle=gR;ctx.fillRect(it.x+it.w-fade,it.y,fade,it.h);
+}
+function drawWorldScene(){
+  var s=SCENES.world,ww=s.worldW,hh=s.worldH;
+  // 草地
+  var g=ctx.createLinearGradient(0,0,0,hh);
+  g.addColorStop(0,'#5aa446');g.addColorStop(1,'#3d7c30');
+  ctx.fillStyle=g;ctx.fillRect(0,0,ww,hh);
+  ctx.fillStyle='rgba(255,255,255,0.055)';
+  for(var i=0;i<200;i++)ctx.fillRect((i*211)%ww,(i*337)%hh,3,3);
+  ctx.fillStyle='rgba(255,255,255,0.16)';
+  for(var f=0;f<40;f++){
+    ctx.beginPath();ctx.arc((f*379)%ww,(f*173)%hh,2.2,0,6.283);ctx.fill();
+  }
+  // 五张场景贴图：家 / 邻居家 / 市场 / 工地 / 学校，拼在同一张世界画布上
+  var wi=s.worldImages||[];
+  for(var q=0;q<wi.length;q++)drawWorldImage(wi[q]);
+  // 道路：必须画在贴图之上，否则会被各张贴图自己的草地盖住
+  drawPath(600,405,180,80);        // 家门前小路
+  drawPath(700,400,280,80);        // 上排横路：家门前 → 邻居家左侧门洞
+  drawPath(700,470,80,320);        // 主竖路：上排 → 下排横路
+  drawPath(60,760,1700,70);        // 下排横路：贯通全宽
+  drawPath(60,830,60,270);         // 市场支路（落到该图左侧门洞）
+  drawPath(620,830,60,270);        // 工地支路
+  drawPath(1180,830,60,270);       // 学校支路
+  // 家门：右侧墙上那扇门（世界坐标 y416~472）是唯一出入口
+  ctx.save();
+  ctx.fillStyle='rgba(255,255,255,0.22)';
+  ctx.beginPath();ctx.moveTo(600,416);ctx.lineTo(656,428);ctx.lineTo(656,460);ctx.lineTo(600,472);
+  ctx.closePath();ctx.fill();
+  ctx.fillStyle='#ffe9a8';ctx.font='bold 15px "Microsoft YaHei"';
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillText('出门 ▸',664,444);
+  ctx.restore();
+  // 树
+  var props=s.props||[];
+  for(var j=0;j<props.length;j++)if(props[j].tree)drawTree(props[j]);
+  // 围栏
+  ctx.strokeStyle='rgba(120,86,50,0.85)';ctx.lineWidth=10;ctx.strokeRect(5,5,ww-10,hh-10);
+  ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=2;ctx.strokeRect(13,13,ww-26,hh-26);
+  // 路的尽头 → 市场 / 工地 / 学校
+  var doors=s.doors||[];
+  for(var k=0;k<doors.length;k++){
+    var d=doors[k];
+    ctx.save();
+    ctx.globalAlpha=0.5+Math.sin(state.time*3+k)*0.16;
+    ctx.fillStyle=s.accent;roundRect(ctx,d.x,d.y,d.w,d.h,12);ctx.fill();ctx.restore();
+    ctx.font='bold 16px "Microsoft YaHei"';
+    ctx.fillStyle='rgba(255,255,255,0.95)';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText(d.label,d.x+d.w/2,d.y-7);
+  }
+  // 睡觉提示（低调呼吸光圈）
+  var inters=s.interactions||[];
+  for(var m=0;m<inters.length;m++){
+    var it=inters[m];
+    ctx.save();ctx.globalAlpha=0.3+Math.sin(state.time*2.4)*0.2;
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=3;
+    roundRect(ctx,it.x,it.y,it.w,it.h,14);ctx.stroke();ctx.restore();
+    ctx.save();ctx.globalAlpha=0.85;
+    ctx.font='26px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(it.icon||'⭐',it.x+it.w/2,it.y+it.h/2);ctx.restore();
+  }
+  // NPC
+  var npcs=s.npcs||[];
+  for(var n=0;n<npcs.length;n++)drawNPC(npcs[n]);
+}
+
+/* ============ §20 碰撞调试视图（G 键开关 / P 键打印清单） ============ */
+// 目的：让"看不见的墙"变得可见 —— 按 G 之后所有不可见碰撞盒都会画成半透明色块，
+//       自己走一圈就能看出哪块位置不对，直接把不对的那条告诉我即可。
+var debugColliders=false;
+function drawDebugColliders(){
+  var s=SCENES[state.scene];if(!s)return;
+  function box(r,fill,stroke){
+    ctx.fillStyle=fill;ctx.fillRect(r.x,r.y,r.w,r.h);
+    ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.strokeRect(r.x,r.y,r.w,r.h);
+  }
+  ctx.save();
+  var cols=s.colliders||[];
+  for(var i=0;i<cols.length;i++)box(cols[i],'rgba(255,40,40,0.30)','rgba(255,130,130,0.95)');
+  var pr=s.props||[];
+  for(var j=0;j<pr.length;j++)box(pr[j],'rgba(40,140,255,0.24)','rgba(130,195,255,0.95)');
+  var ds=s.doors||[];
+  for(var k=0;k<ds.length;k++)box(ds[k],'rgba(40,255,120,0.24)','rgba(150,255,190,0.95)');
+  var its=s.interactions||[];
+  for(var m=0;m<its.length;m++)box(its[m],'rgba(255,230,40,0.22)','rgba(255,245,140,0.95)');
+  box(player,'rgba(255,255,255,0.18)','rgba(255,255,255,0.95)');
+  ctx.restore();
+}
+// 图例必须画在"屏幕坐标"里（不受相机滚动影响），而且要画在 HUD 之后，否则会被 HUD 面板盖住
+function drawDebugLegend(){
+  var lines=[
+    '红=碰撞盒(我建的)  洋红=你标记的框  蓝=树  黄=交互点  白=你',
+    '已标记 '+userMarks.length+' 个框   C=标记模式   Z=撤销   X=清空   P=导出   G=关视图'
+  ];
+  if(markMode)lines.push('标记模式：拖鼠标画框（WASD/方向键平移镜头，角色不动）');
+  ctx.save();
+  ctx.textAlign='left';ctx.textBaseline='top';
+  var lh=19,bh=lines.length*lh+12;
+  ctx.fillStyle='rgba(0,0,0,0.74)';ctx.fillRect(8,86,396,bh);
+  ctx.strokeStyle='rgba(255,209,102,0.9)';ctx.lineWidth=1;ctx.strokeRect(8,86,396,bh);
+  ctx.font='bold 13px "Microsoft YaHei"';
+  for(var i=0;i<lines.length;i++){
+    ctx.fillStyle=i===1?'#ffd166':(i>=2?'#ff7ad9':'#ffffff');
+    ctx.fillText(lines[i],16,92+i*lh);
+  }
+  ctx.restore();
+}
+function printColliderList(){
+  var s=SCENES[state.scene];if(!s)return;
+  var cols=s.colliders||[];
+  var out='【碰撞盒清单】场景='+state.scene+'  共'+cols.length+'条\n';
+  for(var i=0;i<cols.length;i++){
+    var c=cols[i];
+    out+='#'+i+'  {x:'+c.x+',y:'+c.y+',w:'+c.w+',h:'+c.h+'}\n';
+  }
+  if(userMarks.length){
+    out+='\n【你标记的框】共'+userMarks.length+' 个（世界坐标，可直接贴进 colliders）\n[\n';
+    for(var j=0;j<userMarks.length;j++){
+      var m=userMarks[j];
+      out+='  {x:'+m.x+',y:'+m.y+',w:'+m.w+',h:'+m.h+'}'+(j<userMarks.length-1?',':'')+'\n';
+    }
+    out+=']\n';
+  }else{
+    out+='\n【你标记的框】还没有。按 C 进入标记模式，拖鼠标画框。\n';
+  }
+  console.log(out);
+  if(typeof addFloat==='function')addFloat('📋 清单已打印到控制台（含你标记的 '+userMarks.length+' 个框）',player.x+player.w/2,player.y-30,'#ffd166');
+}
+
+/* ============ §21 碰撞标记模式（C 键：你自己在图上拖框，我照着建墙） ============ */
+// 为什么这么做：碰撞盒的坐标靠我在像素图上反推不可靠（就是之前那些"空气墙"），
+// 改成你对着画面拖框 —— 你画在哪儿，墙就建在哪儿，我不再估任何坐标。
+// 用法：C 进入/退出 → 拖鼠标画框（坐标取整、不吸附网格，可以框很细的墙）→ Z 撤销 → X 连按两次清空 → P 导出
+// 画好的框会自动存 localStorage，并且 POST 给本地 server.py 落盘成 marks.json
+var markMode=false;
+var userMarks=[];          // 世界坐标的框 {x,y,w,h}
+var _markDrag=null;        // 正在拖拽的临时框
+var _markHover=null;       // 鼠标所在的世界坐标（画准星用）
+var MARK_SNAP=1;           // 1 = 不吸附网格（只把坐标取整）；想让坐标吸附成网格就改成 4 或 8
+var MARKS_KEY='yzjb_marks_v1';
+var _clearArmed=0;         // X 键"再按一次确认清空"的时间戳
+(function(){
+  try{var s=localStorage.getItem(MARKS_KEY);if(s)userMarks=JSON.parse(s)||[]}catch(e){userMarks=[]}
+})();
+function markSnap(v){return MARK_SNAP>1?Math.round(v/MARK_SNAP)*MARK_SNAP:Math.round(v)}
+function _markFloat(msg,color){
+  if(typeof addFloat==='function')addFloat(msg,player.x+player.w/2,player.y-34,color||'#ff7ad9');
+}
+function saveMarks(){
+  try{localStorage.setItem(MARKS_KEY,JSON.stringify(userMarks))}catch(e){}
+  // 顺手 POST 给本地 server.py 落盘成 marks.json（连不上就算了，不影响标记本身）
+  try{
+    if(typeof fetch==='function'){
+      fetch('/marks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(userMarks)})
+        .then(function(r){_markSaved(!!(r&&r.ok))})
+        .catch(function(){_markSaved(false)});
+      return;
+    }
+  }catch(e){}
+  _markSaved(false);
+}
+function _markSaved(ok){
+  if(ok){if(!_markSaved._ok){_markSaved._ok=true;_markSaved._no=false;_markFloat('💾 标记已存盘（marks.json）','#8be28b')}}
+  else{if(!_markSaved._no){_markSaved._no=true;_markSaved._ok=false;_markFloat('⚠️ 存盘失败，请用 P 键导出','#ff9a6b')}}
+}
+function toggleMarkMode(){
+  if(!DEV_UNLOCKED)return;      // 开发者工具没解锁就直接无视（防玩家乱按）
+  if(state.mode!=='play')return;
+  markMode=!markMode;
+  _clearArmed=0;_markDrag=null;
+  if(markMode){debugColliders=true;touchState.joystick.active=false}
+  _markFloat(markMode?'✏️ 标记模式：拖鼠标画框，WASD 平移镜头':'已退出标记模式');
+}
+function undoMark(){
+  if(!markMode||!userMarks.length)return;
+  userMarks.pop();saveMarks();
+  _markFloat('↩️ 撤销一个框（还剩 '+userMarks.length+' 个）');
+}
+function clearMarks(){
+  if(!markMode)return;
+  if(Date.now()-_clearArmed>2000){
+    _clearArmed=Date.now();
+    _markFloat('⚠️ 再按一次 X 清空全部标记','#ff9a6b');
+    return;
+  }
+  _clearArmed=0;userMarks.length=0;saveMarks();
+  _markFloat('🗑️ 已清空全部标记','#ff9a6b');
+}
+// O 键：从 marks.json 重新载入标记（我在外面改过 marks.json 之后，按一下就能刷新画面上的粉框）
+// 只更新本地显示 + localStorage，不往服务器 POST，避免把刚改好的文件又覆盖回去
+function reloadMarksFromFile(){
+  try{
+    fetch('/marks.json?t='+Date.now())
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+      .then(function(a){
+        if(Object.prototype.toString.call(a)!=='[object Array]')throw new Error('marks.json 不是数组');
+        userMarks.length=0;
+        for(var i=0;i<a.length;i++)userMarks.push({x:a[i].x,y:a[i].y,w:a[i].w,h:a[i].h});
+        try{localStorage.setItem(MARKS_KEY,JSON.stringify(userMarks))}catch(e){}
+        _markFloat('🔄 已从 marks.json 载入 '+a.length+' 个标记','#8be28b');
+      })
+      .catch(function(){_markFloat('⚠️ 读不到 marks.json（要用启动游戏.bat 打开才行）','#ff9a6b')});
+  }catch(e){_markFloat('⚠️ 读不到 marks.json','#ff9a6b')}
+}
+// 标记模式：角色原地不动，WASD/方向键改成平移镜头，方便跑遍整张地图
+function panCameraInMarkMode(dt){
+  var s=SCENES[state.scene]||{},ww=s.worldW||W,hh=s.worldH||H,sp=560*dt;
+  if(keys['KeyA']||keys['ArrowLeft'])camera.x-=sp;
+  if(keys['KeyD']||keys['ArrowRight'])camera.x+=sp;
+  if(keys['KeyW']||keys['ArrowUp'])camera.y-=sp;
+  if(keys['KeyS']||keys['ArrowDown'])camera.y+=sp;
+  camera.x=clamp(camera.x,0,Math.max(0,ww-W));
+  camera.y=clamp(camera.y,0,Math.max(0,hh-H));
+  touchState.joystick.active=false;
+  state.isMoving=false;updatePlayerAnim(dt,false);
+}
+// 鼠标 / 触屏拖拽画框（pointer 事件一次覆盖鼠标与触摸）
+canvas.addEventListener('pointerdown',function(e){
+  if(!markMode||state.mode!=='play')return;
+  var p=getCanvasPos(e.clientX,e.clientY);
+  var wx=markSnap(p.x+camera.x),wy=markSnap(p.y+camera.y);
+  _markDrag={x0:wx,y0:wy,x1:wx,y1:wy};
+  _markHover={x:wx,y:wy};
+  try{if(canvas.setPointerCapture)canvas.setPointerCapture(e.pointerId)}catch(err){}
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove',function(e){
+  if(!markMode||state.mode!=='play')return;
+  var p=getCanvasPos(e.clientX,e.clientY);
+  var wx=markSnap(p.x+camera.x),wy=markSnap(p.y+camera.y);
+  _markHover={x:wx,y:wy};
+  if(_markDrag){_markDrag.x1=wx;_markDrag.y1=wy}
+  e.preventDefault();
+});
+canvas.addEventListener('pointercancel',function(){_markDrag=null});
+window.addEventListener('pointerup',function(){
+  if(!markMode||!_markDrag)return;
+  var d=_markDrag;_markDrag=null;
+  var x=Math.min(d.x0,d.x1),y=Math.min(d.y0,d.y1);
+  var w=Math.abs(d.x1-d.x0),h=Math.abs(d.y1-d.y0);
+  if(w<1||h<1){_markFloat('这一下没拖动（点一下就松了），已忽略','#ff9a6b');return}
+  userMarks.push({x:x,y:y,w:w,h:h});
+  saveMarks();
+  _markFloat('✅ 已标记第 '+userMarks.length+' 个框');
+});
+// 已标记的框一直画出来（退出标记模式也看得见），方便你随时核对
+function drawUserMarks(){
+  var i,m;
+  if(_markDrag){
+    var d=_markDrag,x=Math.min(d.x0,d.x1),y=Math.min(d.y0,d.y1);
+    var w=Math.abs(d.x1-d.x0),h=Math.abs(d.y1-d.y0);
+    ctx.save();
+    ctx.fillStyle='rgba(255,122,217,0.22)';ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle='#ff7ad9';ctx.lineWidth=1;ctx.strokeRect(x,y,w,h);
+    // 拖拽时实时显示尺寸（宽×高），方便把墙框到想要的厚度
+    ctx.fillStyle='rgba(0,0,0,0.72)';ctx.fillRect(x+2,y+h+4,78,18);
+    ctx.fillStyle='#ffd166';ctx.font='bold 12px "Microsoft YaHei"';
+    ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillText(w+' × '+h,x+6,y+h+6);
+    ctx.restore();
+  }
+  for(i=0;i<userMarks.length;i++){
+    m=userMarks[i];
+    ctx.save();
+    ctx.fillStyle='rgba(255,122,217,0.20)';ctx.fillRect(m.x,m.y,m.w,m.h);
+    ctx.strokeStyle='#ff7ad9';ctx.lineWidth=2;ctx.strokeRect(m.x,m.y,m.w,m.h);
+    ctx.fillStyle='#ffffff';ctx.font='bold 12px "Microsoft YaHei"';
+    ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillText('#'+(i+1),m.x+3,m.y+3);
+    ctx.restore();
+  }
+  if(markMode&&_markHover&&!_markDrag){
+    ctx.save();ctx.strokeStyle='#ff7ad9';ctx.lineWidth=1;ctx.beginPath();
+    ctx.moveTo(_markHover.x-13,_markHover.y);ctx.lineTo(_markHover.x+13,_markHover.y);
+    ctx.moveTo(_markHover.x,_markHover.y-13);ctx.lineTo(_markHover.x,_markHover.y+13);
+    ctx.stroke();ctx.restore();
+  }
+}
+function drawNPC(n){
+  // 【通用渲染分支】有 spriteKey 且素材已就绪 → 用预加载的 PNG 精灵；素材未就绪 → 回退下面的彩色小球占位。
+  // 不再提前 return：影子、名字、说话气泡两种渲染模式都照常绘制
+  var drewSprite=false;
+  if(n.spriteKey&&SPRITE_SHEETS[n.spriteKey]){
+    // 帧时长：该角色有单独配置就用自己的，否则沿用玩家的表（两套素材规格一致时看起来是同一速度）
+    var nSt=n.animState||'idle';
+    var nDur=(SPRITE_FRAME_DUR_BY_ROLE[n.spriteKey]||PLAYER_FRAME_DUR)[nSt];
+    drewSprite=drawEntitySprite(n,nSt,NPC_DRAW_W,NPC_DRAW_H,{frameDur:nDur});
+  }
+  var breath=Math.sin(state.time*1.6+n.seed)*0.02;
+  var yOff=-Math.sin(state.time*1.6+n.seed)*1.2;
+  var glow=EMOTION_GLOW[n.emotion];
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.beginPath();ctx.ellipse(n.x+n.w/2,n.y+n.h+4,n.w*0.55,6,0,0,6.283);ctx.fill();
+  if(drewSprite){   // 精灵已画好：名字移到精灵头顶之上，避免压在脸上
+    drawNPCLabel(n,n.y+n.h-NPC_DRAW_H+4-6);
+    return;
+  }
+  ctx.save();
+  if(glow){ctx.shadowColor=glow;ctx.shadowBlur=20}else{ctx.shadowColor=n.color;ctx.shadowBlur=16}
+  var cx=n.x+n.w/2,cy=n.y+n.h/2+yOff,scaleY=1+breath;
+  ctx.translate(cx,cy);ctx.scale(1,scaleY);ctx.translate(-cx,-cy);
+  ctx.fillStyle=n.color;
+  roundRect(ctx,n.x,n.y+yOff,n.w,n.h,9);ctx.fill();
+  ctx.restore();
+  var eyeY=n.y+11+yOff,eyeH=7*n.blinkAmount;
+  if(eyeH>0.5){
+    ctx.fillStyle='#0a0a12';
+    ctx.fillRect(n.x+8,eyeY,5,eyeH);
+    ctx.fillRect(n.x+n.w-13,eyeY,5,eyeH);
+    var px=player.x+player.w/2,py=player.y+player.h/2;
+    var ddx=px-cx,ddy=py-cy,dd=Math.hypot(ddx,ddy);
+    if(dd<180&&dd>1){
+      var ox=(ddx/dd)*1.5,oy=(ddy/dd)*1.5;
+      ctx.fillStyle='rgba(255,255,255,0.9)';
+      ctx.fillRect(n.x+9+ox,eyeY+oy,3,Math.min(3,eyeH));
+      ctx.fillRect(n.x+n.w-12+ox,eyeY+oy,3,Math.min(3,eyeH));
+    }
+  }
+  drawNPCLabel(n,n.y-6);
+}
+// NPC 名字 + 说话气泡：精灵模式与色块模式共用同一条绘制路径，labelY 为名字基线
+function drawNPCLabel(n,labelY){
+  ctx.font='bold 14px "Microsoft YaHei"';
+  ctx.textAlign='center';ctx.textBaseline='bottom';
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  ctx.fillText(n.name,n.x+n.w/2,labelY);
+  if(n.talking){
+    var bx=n.x+n.w/2,by=labelY-34;
+    ctx.save();ctx.globalAlpha=0.9;
+    ctx.fillStyle='rgba(20,20,40,0.9)';
+    roundRect(ctx,bx-20,by-14,40,22,11);ctx.fill();
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=1.5;
+    roundRect(ctx,bx-20,by-14,40,22,11);ctx.stroke();
+    for(var i=0;i<3;i++){
+      var dy=Math.sin(state.time*6+i*0.8)*2;
+      ctx.fillStyle='#ffd700';
+      ctx.beginPath();ctx.arc(bx-8+i*8,by-3+dy,2,0,6.283);ctx.fill();
+    }ctx.restore();
+  }
+}
+
+var EMOTION_GLOW={happy:'#ffd700',sad:'#7a9ec4',angry:'#ff5252',worried:'#ff9f43',neutral:null,surprised:'#c084fc'};
+
+/* ===== 玩家 PNG 精灵：预加载 + 动画状态机（本轮只改渲染，交互/对话/交易逻辑原样不动） ===== */
+// 素材目录规范：sprites/<角色>/<动作>/<动作>_<序号>.png（角色目录名：merchant/girl/xiaoyu/dad/grandma）
+// 各动作的帧数只写在这一张表里，路径由 buildSheet 统一拼出，五个角色共用同一套规则，避免手敲 32 条路径写错
+var SPRITE_SPEC={idle:4,walk_left:6,walk_right:6,walk_up:6,walk_down:6,talk:4};
+// 个别角色帧数与通用表不同时，在这一张覆盖表里单列。
+// 小女孩走路是 8 帧；她在地图上不会播 talk（对话是独立立绘覆盖层），写 0 避免拼出 4 条必然 404 的路径。
+var SPRITE_SPEC_BY_ROLE={
+  girl:{idle:4,walk_left:8,walk_right:8,walk_up:8,walk_down:8,talk:0},      // 走路 8 帧
+  grandma:{idle:1,walk_left:4,walk_right:4,walk_up:4,walk_down:4,talk:0}    // 走路 4 帧；没有待机图 → 用正面第 1 帧静态站立
+};
+// 个别角色的动画帧时长。帧数少的角色（奶奶只有 4 帧走路）沿用玩家那套 0.18 秒会步频过快、
+// 看着像滑行，这里单独配慢一档；没登记的角色仍旧用 PLAYER_FRAME_DUR，行为不变
+var SPRITE_FRAME_DUR_BY_ROLE={grandma:{idle:0.9,walk_left:0.32,walk_right:0.32,walk_up:0.32,walk_down:0.32}};
+function buildSheet(role){
+  var spec=SPRITE_SPEC,over=SPRITE_SPEC_BY_ROLE[role];
+  if(over){                       // 有覆盖时才拷一份，避免污染通用表（不传覆盖的角色行为与原来完全一致）
+    spec={};
+    for(var sk in SPRITE_SPEC)spec[sk]=SPRITE_SPEC[sk];
+    for(var ok in over)spec[ok]=over[ok];
+  }
+  var out={};
+  for(var act in spec){
+    out[act]=[];
+    for(var i=0;i<spec[act];i++)out[act].push('sprites/'+role+'/'+act+'/'+act+'_'+i+'.png');
+  }
+  return out;
+}
+var PLAYER_SPRITE_FILES=buildSheet('merchant');
+// 每帧时长(秒)：idle 4帧=2.8s 一个呼吸循环；走路 6帧×0.18s=1.08s 一个步态(约1.85步/秒)；talk 4帧=1.28s
+var PLAYER_FRAME_DUR={idle:0.70,walk_left:0.18,walk_right:0.18,walk_up:0.18,walk_down:0.18,talk:0.32};
+var PLAYER_DRAW_W=64,PLAYER_DRAW_H=72;        // 固定绘制宽高
+var NPC_DRAW_W=64,NPC_DRAW_H=72;              // NPC 精灵也按素材原始尺寸绘制（原按 n.w*2=72 画会把 64 宽的素材横向拉伸 1.125 倍）
+var playerSprites={},playerSpritesTotal=0,playerSpritesReady=0,spriteMissing=[];
+(function preloadPlayerSprites(){
+  for(var stName in PLAYER_SPRITE_FILES){
+    var files=PLAYER_SPRITE_FILES[stName];playerSprites[stName]=[];
+    for(var fi=0;fi<files.length;fi++){
+      (function(stateName,srcPath){
+        var im=new Image();
+        im.onload=function(){playerSpritesReady++};
+        im.onerror=function(){        // 素材缺失不再静默：控制台点名 + 记入清单，HUD 会提示缺几张
+          console.error('[SPRITE 404] '+srcPath);
+          spriteMissing.push(srcPath);
+          playerSpritesReady++;
+        };
+        im.src=srcPath;
+        playerSprites[stateName].push(im);
+      })(stName,files[fi]);
+      playerSpritesTotal++;
+    }
+  }
+})();
+
+/* ===== 通用实体渲染框架：精灵 / 小球占位兼容 ===== */
+// spriteKey → { idle:[Image,...], walk_left:[...], walk_right:[...], talk:[...] }
+// 现有已经调好的商人(玩家)素材原样登记进来复用，不改动其加载与绘制逻辑
+var SPRITE_SHEETS={};
+SPRITE_SHEETS.merchant=playerSprites;
+// NPC 精灵：路径同样走 buildSheet，复用玩家那套加载与计数，缺图照样点名 + 计入 HUD。
+// 凡是在 SPRITE_SPEC_BY_ROLE 里登记过的角色都会在这里预加载 → 以后新增角色只改那张表 + 摆素材即可
+(function preloadNPCSprites(){
+  for(var role in SPRITE_SPEC_BY_ROLE){
+    var roleFiles=buildSheet(role),sp={};
+    for(var stName in roleFiles){
+      var files=roleFiles[stName];sp[stName]=[];
+      for(var fi=0;fi<files.length;fi++){
+        (function(stateName,srcPath){
+          var im=new Image();
+          im.onload=function(){playerSpritesReady++};
+          im.onerror=function(){
+            console.error('[SPRITE 404] '+srcPath);
+            spriteMissing.push(srcPath);
+            playerSpritesReady++;
+          };
+          im.src=srcPath;
+          sp[stateName].push(im);
+        })(stName,files[fi]);
+        playerSpritesTotal++;
+      }
+    }
+    SPRITE_SHEETS[role]=sp;
+  }
+})();
+
+var _spriteLastT=-1,_spriteDt=0;
+// 同一帧内多个实体共用同一个 dt（否则同一帧里第二个实体会拿到 0）
+function entityAnimDt(){
+  if(state.time===_spriteLastT)return _spriteDt;
+  _spriteDt=(_spriteLastT<0)?0:Math.max(0,Math.min(0.12,state.time-_spriteLastT));
+  _spriteLastT=state.time;
+  return _spriteDt;
+}
+// 用 animTimer 推进帧循环，返回本帧应绘制的 Image；无素材或素材未就绪返回 null
+function stepEntityAnim(ent,stateName,frameDur){
+  var sheet=SPRITE_SHEETS[ent.spriteKey];
+  if(!sheet)return null;
+  var frames=sheet[stateName];
+  if(!frames||!frames.length)return null;
+  if(ent.animState!==stateName){ent.animState=stateName;ent.animTimer=0;ent.animFrame=0}
+  ent.animTimer+=entityAnimDt();
+  var dur=frameDur||0.5;
+  if(frames.length>1){
+    while(ent.animTimer>=dur){ent.animTimer-=dur;ent.animFrame=(ent.animFrame+1)%frames.length}
+  }else ent.animFrame=0;
+  var img=frames[ent.animFrame]||frames[0];
+  return (img&&img.complete&&img.naturalWidth)?img:null;
+}
+// 统一精灵绘制：ctx.drawImage + 固定渲染尺寸 + imageSmoothingEnabled=false
+// 返回 true = 已用精灵绘制；返回 false = 该实体没有可用精灵，调用方回退小球占位
+function drawEntitySprite(ent,stateName,drawW,drawH,opts){
+  opts=opts||{};
+  if(!ent.spriteKey||!SPRITE_SHEETS[ent.spriteKey])return false;
+  var img=stepEntityAnim(ent,stateName,opts.frameDur);
+  if(!img)return false;
+  var dx=Math.round(ent.x+ent.w/2-drawW/2);
+  var dy=Math.round(ent.y+ent.h-drawH+4+(opts.bob||0));
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  if(opts.flip){ctx.translate(dx+drawW,dy);ctx.scale(-1,1);ctx.drawImage(img,0,0,drawW,drawH)}
+  else{ctx.drawImage(img,dx,dy,drawW,drawH)}
+  ctx.restore();
+  return true;
+}
+
+var _playerAnimLastT=-1;
+// 某组素材是否已全部就绪（未就绪时上下方向回退到左右图，避免人物整帧不显示）
+function playerHasFrames(name){
+  var fr=playerSprites[name];
+  if(!fr||!fr.length)return false;
+  for(var i=0;i<fr.length;i++){if(!fr[i]||!fr[i].complete||!fr[i].naturalWidth)return false}
+  return true;
+}
+// 选状态：对话中 → talk；移动中 → 按朝向走路；否则 idle
+function pickPlayerAnimState(){
+  if(state.mode==='dialog')return 'talk';
+  if(state.isMoving){
+    if(player.dir==='left')return 'walk_left';
+    if(player.dir==='right')return 'walk_right';
+    if(player.dir==='up')return playerHasFrames('walk_up')?'walk_up':(player.lastDirH==='left'?'walk_left':'walk_right');
+    if(player.dir==='down')return playerHasFrames('walk_down')?'walk_down':(player.lastDirH==='left'?'walk_left':'walk_right');
+    return player.lastDirH==='left'?'walk_left':'walk_right';
+  }
+  return 'idle';
+}
+
+// 用 drawImage 渲染玩家：固定宽高、imageSmoothingEnabled=false（不使用 arc/bezierCurveTo/fillRect 画人）
+function drawPlayerSprite(){
+  var now=state.time;
+  var dt=(_playerAnimLastT<0)?0:Math.max(0,Math.min(0.12,now-_playerAnimLastT));
+  _playerAnimLastT=now;
+  if(player.dir==='left'||player.dir==='right')player.lastDirH=player.dir;
+
+  // animTimer 驱动帧循环
+  var animState=pickPlayerAnimState();
+  if(animState!==player.animState){player.animState=animState;player.animTimer=0;player.animFrame=0}
+  player.animTimer+=dt;
+  var frames=playerSprites[animState]||[];
+  var dur=PLAYER_FRAME_DUR[animState]||0.5;
+  if(frames.length>1){
+    while(player.animTimer>=dur){player.animTimer-=dur;player.animFrame=(player.animFrame+1)%frames.length}
+  }else player.animFrame=0;
+
+  var img=frames[player.animFrame]||frames[0];
+  if(!img||!img.complete||!img.naturalWidth)return;   // 素材未就绪就先不画（不回落成小球）
+
+  var cx=player.x+player.w/2,feetY=player.y+player.h;
+  var dx=Math.round(cx-PLAYER_DRAW_W/2);
+  var dy=Math.round(feetY-PLAYER_DRAW_H+4+player.bobY);
+  var needFlip=((animState==='idle'||animState==='talk')&&player.lastDirH==='left');  // walk_left 已是镜像图，不再翻转
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;          // 贴图不模糊
+  if(needFlip){
+    ctx.translate(dx+PLAYER_DRAW_W,dy);ctx.scale(-1,1);
+    ctx.drawImage(img,0,0,PLAYER_DRAW_W,PLAYER_DRAW_H);
+  }else{
+    ctx.drawImage(img,dx,dy,PLAYER_DRAW_W,PLAYER_DRAW_H);
+  }
+  ctx.restore();
+}
+function drawFloats(){
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(var i=0;i<state.floats.length;i++){
+    var f=state.floats[i];
+    var a=Math.min(1,f.life/(f.maxLife*0.5));
+    ctx.globalAlpha=a;
+    var sc=f.scale<1?Ease.outBack(f.scale):1;
+    ctx.save();ctx.translate(f.x,f.y);ctx.scale(sc,sc);
+    ctx.font='bold 18px "Microsoft YaHei"';ctx.fillStyle=f.color;
+    ctx.shadowColor='rgba(0,0,0,0.8)';ctx.shadowBlur=6;
+    ctx.fillText(f.text,0,0);ctx.restore();
+  }
+  ctx.globalAlpha=1;
+}
+function drawHUD(){
+  ctx.fillStyle='rgba(8,8,18,0.78)';
+  roundRect(ctx,20,16,632,58,14);ctx.fill();
+  ctx.strokeStyle='rgba(140,180,255,0.25)';ctx.lineWidth=2;
+  roundRect(ctx,20,16,632,58,14);ctx.stroke();
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.font='bold 22px "Microsoft YaHei"';ctx.fillStyle='#ffd700';
+  ctx.fillText('💰 '+Math.round(state.displayMoney)+' / '+GOAL,42,45);
+  var bx=442,by=32,bw=190,bh=26;
+  ctx.fillStyle='rgba(0,0,0,0.6)';roundRect(ctx,bx,by,bw,bh,9);ctx.fill();
+  var ratio=clamp(state.energy/state.maxEnergy,0,1);
+  var grad=ctx.createLinearGradient(bx,0,bx+bw,0);
+  if(ratio>0.3){grad.addColorStop(0,'#3ddc84');grad.addColorStop(1,'#7bd7ff')}
+  else{grad.addColorStop(0,'#ff4d4d');grad.addColorStop(1,'#ff9f43')}
+  ctx.fillStyle=grad;
+  roundRect(ctx,bx,by,Math.max(6,bw*ratio),bh,9);ctx.fill();
+  ctx.font='bold 15px "Microsoft YaHei"';ctx.fillStyle='#fff';
+  ctx.textAlign='center';
+  ctx.fillText('精力 '+Math.ceil(state.energy),bx+bw/2,by+bh/2+1);
+  // 背包（砖/水泥/安全帽/手脚架/糖/烟/酒）
+  var bagDef=[['brick','🧱'],['cement','🧰'],['helmet','⛑️'],['scaffold','🪜'],
+              ['candy','🍬'],['cigarette','🚬'],['wine','🍶']];
+  var bagW=632,bagH=30,bagX=20,bagY=86;
+  ctx.fillStyle='rgba(8,8,18,0.6)';
+  roundRect(ctx,bagX,bagY,bagW,bagH,10);ctx.fill();
+  ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='15px "Microsoft YaHei"';
+  var bx3=bagX+14;
+  for(var bi=0;bi<bagDef.length;bi++){
+    var label=bagDef[bi][1]+' '+(state.bag[bagDef[bi][0]]||0);
+    ctx.fillStyle='#d6ecff';
+    ctx.fillText(label,bx3,bagY+bagH/2+1);
+    bx3+=ctx.measureText(label).width+16;
+  }
+  ctx.textAlign='right';
+  ctx.font='bold 22px "Microsoft YaHei"';ctx.fillStyle='#a8c6ff';
+  ctx.fillText(SCENES[state.scene].name,W-30,45);
+  ctx.font='bold 16px "Microsoft YaHei"';ctx.fillStyle='rgba(255,215,0,0.85)';
+  ctx.textAlign='right';
+  ctx.fillText('📅 第 '+state.day+' 天',W-30,72);
+  // 背景音乐状态（M 键切换）。AI 状态行原先也画在 y=72，会和天数叠在一起，这里一并下移
+  ctx.textAlign='right';ctx.font='14px "Microsoft YaHei"';
+  if(bgm.muted){
+    ctx.fillStyle='rgba(160,175,205,0.6)';
+    ctx.fillText('🔇 背景音乐已关闭（M 开启）',W-30,92);
+  }else if(bgm.failed){
+    ctx.fillStyle='rgba(160,175,205,0.6)';
+    ctx.fillText('🔇 背景音乐未播放（缺 music/piano_bgm_75bpm_loop.mp3）',W-30,92);
+  }else if(bgm.el&&!bgm.el.paused){
+    ctx.fillStyle='rgba(160,220,255,0.7)';
+    ctx.fillText('🎵 Piano BGM 75bpm（M 静音）',W-30,92);
+  }
+  if(AIAdapter.degraded&&Date.now()<AIAdapter.degradedUntil){
+    // 后端暂时连不上：只影响这一小段时间，到点自动重试（不再是一断就永久断）
+    ctx.font='14px "Microsoft YaHei"';ctx.fillStyle='rgba(255,180,110,0.85)';
+    ctx.textAlign='right';
+    var secLeft=Math.max(1,Math.ceil((AIAdapter.degradedUntil-Date.now())/1000));
+    ctx.fillText('💻 本地兜底AI · 后端暂时连不上，'+secLeft+'秒后自动重试',W-30,110);
+  }else if(state.cloud.enabled){
+    ctx.font='14px "Microsoft YaHei"';
+    if(state.cloud.coolUntil&&Date.now()<state.cloud.coolUntil){
+      var coolLeft=Math.max(1,Math.ceil((state.cloud.coolUntil-Date.now())/1000));
+      ctx.fillStyle='rgba(255,180,110,0.85)';
+      ctx.fillText('☁️ 云端熔断中，本地AI接管 · '+coolLeft+'秒后重试云端',W-30,110);
+    }else if(state.cloud.ok!==false){
+      ctx.fillStyle='rgba(160,220,255,0.55)';
+      ctx.fillText('☁️ 云端AI · '+(state.cloud.model||''),W-30,110);
+    }else{
+      ctx.fillStyle='rgba(255,140,140,0.9)';
+      ctx.fillText('☁️ 云端这次没连上 → 本轮用本地AI（F12 控制台看 [API] 日志）',W-30,110);
+    }
+  }
+  // PNG 精灵就绪：只有素材缺图（404）时才提示，全部就绪时这一行不显示、不占屏幕
+  if(spriteMissing.length){
+    ctx.textAlign='right';ctx.font='14px "Microsoft YaHei"';ctx.fillStyle='rgba(255,140,140,0.9)';
+    ctx.fillText('⚠ 精灵缺 '+spriteMissing.length+'/'+playerSpritesTotal+' 张（F12 控制台看 [SPRITE 404]）',W-30,128);
+  }
+  ctx.textAlign='left';ctx.font='14px "Microsoft YaHei"';
+  ctx.fillStyle='rgba(200,210,240,0.45)';
+  ctx.fillText(isTouch?'摇杆移动 · 按钮互动 · 点击选项/推进对话'
+                     :'WASD 移动 · E 互动 · F 与人交谈 · 空格对话 · 鼠标点击选项 · 1-5 选项 · B 背包 · R 重开 · M 音乐',30,H-22);
+}
+// 底部交互提示条：slot=0 最下一行（E），slot=1 往上叠一行（F 交谈）
+function drawPromptBanner(key,label,slot){
+  var text=isTouch?'点击 ['+key+'] · '+label:'['+key+'] '+label;
+  ctx.font='bold 20px "Microsoft YaHei"';
+  var tw=ctx.measureText(text).width;
+  var x=W/2-tw/2-20,y=H-118-(slot||0)*56;
+  ctx.fillStyle='rgba(8,8,18,0.88)';
+  roundRect(ctx,x,y,tw+40,46,12);ctx.fill();
+  ctx.strokeStyle='#ffd700';ctx.lineWidth=2;
+  roundRect(ctx,x,y,tw+40,46,12);ctx.stroke();
+  ctx.fillStyle='#ffd700';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(text,W/2,y+24);
+}
+function drawInteractPrompt(){
+  var slot=0,it=getNearbyInteraction();
+  if(it){drawPromptBanner('E',it.label,slot);slot++}
+  // 与玩家身体重叠的 NPC：提示按 F 交谈（谈不谈由玩家决定）
+  if(state.talkTarget)drawPromptBanner('F','与'+state.talkTarget.name+'交谈',slot);
+}
+function wrapText(text,x,y,maxWidth,lineHeight){
+  var chars=text.split(''),line='',ly=y;
+  for(var i=0;i<chars.length;i++){
+    var test=line+chars[i];
+    if(ctx.measureText(test).width>maxWidth&&line!==''){
+      ctx.fillText(line,x,ly);line=chars[i];ly+=lineHeight;
+    }else line=test;
+  }
+  if(line)ctx.fillText(line,x,ly);
+}
+/* ============ §22 NPC 走动与日程（邻居家 4 人） ============ */
+// 需求：邻居家 4 人（小女孩 / 哥哥 / 爸爸 / 奶奶）不再钉在原地 ——
+//   平时在自家屋里小范围踱步；每天「邻居每日剧情播完之后」按概率出门一次，
+//   沿主路走到市场 / 学校 / 工地，当天不再回来（以后加了时间系统再接"晚上回家"）。
+// 实测得到的两条硬约束：
+//   1) 碰撞体必须是 26×26（与玩家一致）。用角色显示的 36×36 的话，4 人连屋门口都挤不出去。
+//   2) 屋内隔墙 + 家具盒太密，硬编码路点不可靠 → 用 BFS 网格寻路（懒构建，只在第一次需要时算一次）。
+// 不穿墙：每走一小步都用 npcFree 复核；会避让玩家（下一步若撞到玩家就停下等，避免把玩家顶出/误触发对话）。
+// 备注：本轮仍是彩色方块走位；等真立绘就位后，这套走位逻辑一行都不用改。
+var NPC_WALK_SPEED=58;      // NPC 走路速度（玩家是 235，明显更慢）
+var NPC_COLLIDE=26;         // NPC 碰撞体边长（与玩家一致，见上面硬约束 1）
+var NPC_GRID=8;             // 寻路网格边长（太大→漏掉窄门；太小→建网格变慢）
+var NPC_ARRIVE=3;           // 到点判定（像素）。到点会把坐标吸附到路点精确值，窄缝里才不会因浮点误差卡住
+var NPC_STUCK_TIME=1.5;     // 连续走不动多久算卡死（秒）
+
+// 日程表：只有这 4 位会走动。
+//  leaveTo  出门目的地（[x,y]，NPC 左上角落点，取景内可站处）
+//  prob     每天出门概率        radius  自家踱步半径（奶奶最小）   interval  两次行动的间隔秒数
+//  爸爸的 radius 特意压到 110：他家在屋里，半径小才不会踱到院外（出现在院子＝正在出门）
+var NPC_ROUTINE={
+  girl:   {leaveTo:[380,1040],  prob:0.30, radius:110, interval:7},
+  xiaoyu: {leaveTo:[1400,1060], prob:0.70, radius:120, interval:7},
+  dad:    {leaveTo:[916,1160],  prob:0.70, radius:110, interval:7},
+  grandma:{leaveTo:[380,1040],  prob:0.10, radius:60,  interval:28}
+};
+
+// 尺寸感知的通行判定：原 isFree 写死了 player.w/h，这里按传入尺寸判（判断顺序与 isFree 完全一致）
+function npcFree(x,y,w,h,scene){
+  var b=sceneBounds(scene);
+  var r={x:x,y:y,w:w,h:h};
+  if(r.x<b.x||r.y<b.y||r.x+r.w>b.x+b.w||r.y+r.h>b.y+b.h)return false;
+  var props=scene.props||[];
+  for(var i=0;i<props.length;i++){
+    var p=props[i];if(p.solid===false)continue;
+    if(rectOverlap(r,p))return false;
+  }
+  var cols=scene.colliders||[];
+  for(var j=0;j<cols.length;j++){
+    if(rectOverlap(r,cols[j]))return false;
+  }
+  return true;
+}
+// NPC 能不能移动到 (x,y)：只判墙与场景边界。
+// 角色之间不做碰撞（硬约束：模型只与墙体/空气墙碰撞），否则窄道上会把彼此顶死在墙边
+function npcCanMoveTo(n,x,y,scene){
+  return npcFree(x,y,NPC_COLLIDE,NPC_COLLIDE,scene);
+}
+
+// —— 可走网格（懒构建：大地图只算一次；约 4 万个格子）——
+// 建网格时顺便给每个可走格标"连通分量"：踱步落点只在同一分量里挑，
+// 否则会挑到墙那头的口袋（看着能站，其实走不过去），NPC 白跑一趟。
+var npcGrid=null;
+function npcBuildGrid(){
+  var scene=SCENES.world,cs=NPC_GRID;
+  var cols=Math.ceil(scene.worldW/cs),rows=Math.ceil(scene.worldH/cs),total=cols*rows;
+  var data=new Uint8Array(total);
+  for(var j=0;j<rows;j++){
+    for(var i=0;i<cols;i++){
+      if(npcFree(i*cs,j*cs,NPC_COLLIDE,NPC_COLLIDE,scene))data[j*cols+i]=1;
+    }
+  }
+  var comp=new Uint16Array(total),cid=0,stack=new Int32Array(total);
+  for(var s=0;s<total;s++){
+    if(!data[s]||comp[s])continue;
+    cid++;var sp=0;stack[sp++]=s;comp[s]=cid;
+    while(sp>0){
+      var cur=stack[--sp],ci=cur%cols,cj=(cur-ci)/cols;
+      if(ci>0&&data[cur-1]&&!comp[cur-1]){comp[cur-1]=cid;stack[sp++]=cur-1}
+      if(ci<cols-1&&data[cur+1]&&!comp[cur+1]){comp[cur+1]=cid;stack[sp++]=cur+1}
+      if(cj>0&&data[cur-cols]&&!comp[cur-cols]){comp[cur-cols]=cid;stack[sp++]=cur-cols}
+      if(cj<rows-1&&data[cur+cols]&&!comp[cur+cols]){comp[cur+cols]=cid;stack[sp++]=cur+cols}
+    }
+  }
+  npcGrid={cs:cs,cols:cols,rows:rows,data:data,comp:comp,total:total,prev:null,q:null};
+  return npcGrid;
+}
+// 找 (x,y) 最近的可走格；周围 14 格内找不到就返回 -1
+function npcNearestCell(x,y,g){
+  var cs=g.cs,cols=g.cols,rows=g.rows,data=g.data;
+  var i=clamp(Math.round(x/cs),0,cols-1),j=clamp(Math.round(y/cs),0,rows-1);
+  if(data[j*cols+i])return j*cols+i;
+  for(var r=1;r<=14;r++){
+    for(var di=-r;di<=r;di++){
+      for(var dj=-r;dj<=r;dj++){
+        if(Math.max(Math.abs(di),Math.abs(dj))!==r)continue;
+        var ii=i+di,jj=j+dj;
+        if(ii<0||jj<0||ii>=cols||jj>=rows)continue;
+        if(data[jj*cols+ii])return jj*cols+ii;
+      }
+    }
+  }
+  return -1;
+}
+// BFS 寻路：返回 [{x,y}...]（世界坐标，每格顶点＝NPC 左上角落点），找不到返回 null
+function npcFindPath(x0,y0,x1,y1){
+  var g=npcGrid||npcBuildGrid();
+  var cs=g.cs,cols=g.cols,rows=g.rows,data=g.data,total=g.total;
+  var s=npcNearestCell(x0,y0,g),t=npcNearestCell(x1,y1,g);
+  if(s<0||t<0)return null;
+  if(!g.prev){g.prev=new Int32Array(total);g.q=new Int32Array(total)}
+  var prev=g.prev,q=g.q;
+  prev.fill(-1);
+  var head=0,tail=0;
+  q[tail++]=s;prev[s]=s;
+  var hit=false;
+  while(head<tail){
+    var cur=q[head++];
+    if(cur===t){hit=true;break}
+    var ci=cur%cols,cj=(cur-ci)/cols;
+    if(ci>0&&data[cur-1]&&prev[cur-1]<0){prev[cur-1]=cur;q[tail++]=cur-1}
+    if(ci<cols-1&&data[cur+1]&&prev[cur+1]<0){prev[cur+1]=cur;q[tail++]=cur+1}
+    if(cj>0&&data[cur-cols]&&prev[cur-cols]<0){prev[cur-cols]=cur;q[tail++]=cur-cols}
+    if(cj<rows-1&&data[cur+cols]&&prev[cur+cols]<0){prev[cur+cols]=cur;q[tail++]=cur+cols}
+  }
+  if(!hit)return null;
+  var path=[],c=t;
+  while(c!==s){path.push({x:(c%cols)*cs,y:Math.floor(c/cols)*cs});c=prev[c]}
+  path.reverse();
+  if(npcFree(x1,y1,NPC_COLLIDE,NPC_COLLIDE,SCENES.world))path.push({x:x1,y:y1});   // 末尾补精确目标点
+  return path;
+}
+
+// 在 (bx,by) 附近挑一个"和 NPC 同一连通分量"的可走格当踱步落点（保证一定走得过去）
+function npcRandomSpot(n,bx,by,radius){
+  var g=npcGrid||npcBuildGrid();
+  var cs=g.cs,cols=g.cols,rows=g.rows,data=g.data,comp=g.comp;
+  var here=npcNearestCell(n.x,n.y,g);
+  if(here<0)return null;
+  var cid=comp[here],ri=Math.max(1,Math.round(radius/cs));
+  var ci=Math.round(bx/cs),cj=Math.round(by/cs);
+  for(var k=0;k<40;k++){
+    var i=ci+Math.round((Math.random()*2-1)*ri),j=cj+Math.round((Math.random()*2-1)*ri);
+    if(i<0||j<0||i>=cols||j>=rows)continue;
+    var idx=j*cols+i;
+    if(data[idx]&&comp[idx]===cid)return {x:i*cs,y:j*cs};
+  }
+  return null;
+}
+
+// 沿路径走一小段：每轴分别试（可沿墙侧滑）；返回 true＝整条路走完
+function npcWalk(n,dt){
+  var st=n.npcState,scene=SCENES.world;
+  var budget=NPC_WALK_SPEED*dt,guard=0;
+  while(st.path&&st.idx<st.path.length&&budget>0&&guard++<80){
+    var node=st.path[st.idx];
+    var dx=node.x-n.x,dy=node.y-n.y,dist=Math.hypot(dx,dy);
+    if(dist<=NPC_ARRIVE){n.x=node.x;n.y=node.y;st.idx++;continue}   // 到点：吸附到路点精确坐标（窄缝里才不会因浮点误差卡住）
+    var step=Math.min(budget,dist),ux=dx/dist,uy=dy/dist,moved=false;
+    if(ux!==0){var nx=n.x+ux*step;if(npcCanMoveTo(n,nx,n.y,scene)){n.x=nx;moved=true}}
+    if(uy!==0){var ny=n.y+uy*step;if(npcCanMoveTo(n,n.x,ny,scene)){n.y=ny;moved=true}}
+    budget-=step;
+    if(!moved){   // 这一步两边都走不动：撞墙/被地形卡住 → 只累计卡死计时，交给上层重算路径
+      n.animState='idle';   // 原地等：停掉走路动画，避免"卡住还在原地踏步"
+      st.stuck=(st.stuck||0)+dt;
+      return false;
+    }
+    // 朝向：按位移主轴选走路动画（左右优先，其次上下），供 drawEntitySprite 选帧
+    if(Math.abs(ux)>=Math.abs(uy))n.animState=(ux>=0?'walk_right':'walk_left');
+    else n.animState=(uy>=0?'walk_down':'walk_up');
+    if(Math.hypot(node.x-n.x,node.y-n.y)<=NPC_ARRIVE){n.x=node.x;n.y=node.y;st.idx++}
+  }
+  return !st.path||st.idx>=st.path.length;
+}
+
+// —— 每帧推进 4 位邻居家人的日程（只在正常玩法里跑；自由行走属正常玩法，所以不加开发者锁）——
+function updateNPCRoutines(dt){
+  if(state.scene!=='world')return;
+  if(state.mode!=='play'||state.story||state.dialog||state.inputLocked)return;   // 剧情/对话/过场时冻结
+  var list=SCENES.world.npcs||[];
+  for(var i=0;i<list.length;i++){
+    var n=list[i],rt=NPC_ROUTINE[n.id];
+    if(rt)npcRoutineTick(n,rt,dt);
+  }
+}
+function npcRoutineTick(n,rt,dt){
+  var st=n.npcState;
+  if(!st){st=n.npcState={mode:'idle',path:null,idx:0,dest:null,out:false,
+                         nextT:1+Math.random()*3,stuck:0,replans:0}}
+  if(st.mode==='moving'){
+    if(npcWalk(n,dt)){n.animState='idle';st.mode='idle';st.path=null;st.stuck=0;st.replans=0;
+                      st.nextT=rt.interval*(0.6+Math.random()*0.8);return}
+    if(st.stuck>NPC_STUCK_TIME){   // 撞墙卡死：原地重算路径，最多两次；再不行就放弃这次行动
+      st.stuck=0;st.replans++;
+      var p=(st.replans<=2)?npcFindPath(n.x,n.y,st.dest.x,st.dest.y):null;
+      if(p){st.path=p;st.idx=0}
+      else{n.animState='idle';st.mode='idle';st.path=null;st.replans=0;st.nextT=rt.interval*0.5}
+      return;
+    }
+    return;
+  }
+  st.nextT-=dt;
+  if(st.nextT>0)return;
+  npcDecide(n,rt,st);
+}
+function npcDecide(n,rt,st){
+  var daily=state.dailyDone,tripKey='npcTrip_'+n.id;
+  // 1) 每日剧情播过之后，才有资格出门；一天最多出门一次
+  if(daily.neighbor&&!daily[tripKey]&&!st.out&&rt.leaveTo&&Math.random()<rt.prob){
+    var p=npcFindPath(n.x,n.y,rt.leaveTo[0],rt.leaveTo[1]);
+    if(p){daily[tripKey]=true;st.out=true;st.path=p;st.idx=0;st.mode='moving';
+          st.dest={x:rt.leaveTo[0],y:rt.leaveTo[1]};st.stuck=0;st.replans=0;return}
+  }
+  // 2) 否则在"自家"（已出门的就在目的地）附近原地踱步
+  var base=st.out?rt.leaveTo:[n.homeX,n.homeY];
+  var tgt=npcRandomSpot(n,base[0],base[1],rt.radius);
+  if(tgt){
+    var p2=npcFindPath(n.x,n.y,tgt.x,tgt.y);
+    if(p2){st.path=p2;st.idx=0;st.mode='moving';st.dest=tgt;st.stuck=0;st.replans=0;return}
+  }
+  st.nextT=rt.interval*(0.6+Math.random()*0.8);   // 没找到落点/路线，下次再说
+}
+// 睡觉推进天数时把 4 人传回各自家里，并清掉"今日已出门"（标记存在 state.dailyDone 里，睡觉时正好被清空）
+function resetFamilyNPCs(){
+  var list=(SCENES.world&&SCENES.world.npcs)||[];
+  for(var i=0;i<list.length;i++){
+    var n=list[i],rt=NPC_ROUTINE[n.id];
+    if(!rt)continue;
+    if(n.homeX==null){n.homeX=n.x;n.homeY=n.y}
+    n.x=n.homeX;n.y=n.homeY;
+    n.npcState={mode:'idle',path:null,idx:0,dest:null,out:false,
+                nextT:1+Math.random()*3,stuck:0,replans:0};
+  }
+}
+
+/* ============ §14.6 对话立绘（邻居 4 人） ============ */
+// 色块占位版：素材画好后把文件写进 PORTRAIT_FILES 即可自动换成 PNG，无需改别处
+// 命名规则：portraits/<id>_<表情>.png，例如 portraits/girl_cry.png
+var PORTRAIT_FILES=[
+  'portraits/grandma_normal.png','portraits/grandma_cold.png',
+  'portraits/girl_normal.png','portraits/girl_cry.png',
+  'portraits/dad_normal.png','portraits/dad_sad.png',
+  'portraits/xiaoyu_normal.png','portraits/xiaoyu_sad.png',
+  // 玩家 7 张表情：normal 说话中 / angry 不满 / think 思考 / flat 平静 / happy 大笑 / smile 微笑 / awkward 尴尬
+  'portraits/player_normal.png','portraits/player_angry.png','portraits/player_think.png',
+  'portraits/player_flat.png','portraits/player_happy.png','portraits/player_smile.png',
+  'portraits/player_awkward.png'
+];
+var PORTRAIT_IMAGES={};
+for(var pfi=0;pfi<PORTRAIT_FILES.length;pfi++){
+  (function(path){
+    var m=/portraits\/(.+?)_([a-z]+)\.png$/.exec(path);
+    if(!m)return;
+    var img=new Image();img.src=path;
+    PORTRAIT_IMAGES[m[1]+'_'+m[2]]=img;
+  })(PORTRAIT_FILES[pfi]);
+}
+// 每个立绘的配色与可用表情（normal 必备；cry/cold 为结局特殊表情）
+// mouth 决定正常表情下的嘴型：smile 亲切 / flat 平淡
+var PORTRAITS={
+  girl:{name:'小女孩',skin:'#ffe2c8',hair:'#6b4a32',cloth:'#ff9ec4',acc:'#ffd76d',eye:'#3f2b1e',
+    normal:{mouth:'smile'},cry:{cloth:'#f48fb4',mouth:'frown'}},
+  xiaoyu:{name:'哥哥',skin:'#ffdcb4',hair:'#2f2a26',cloth:'#5b9bd8',acc:'#ffffff',eye:'#33302b',
+    normal:{mouth:'smile'},sad:{cloth:'#4878a8',acc:'#e8e8ee',mouth:'frown'}},
+  dad:{name:'爸爸',skin:'#e8b483',hair:'#2b2320',cloth:'#7fb3ff',acc:'#f0c060',eye:'#3a2f26',
+    normal:{mouth:'smile'},sad:{cloth:'#7794b8',acc:'#d9b566',mouth:'frown'}},
+  grandma:{name:'奶奶',skin:'#f0cfae',hair:'#d8d8e0',cloth:'#b8b8c8',acc:'#a04c4c',eye:'#4a3b30',
+    normal:{mouth:'smile'},cold:{cloth:'#8a8a98',acc:'#5a5a66',mouth:'flat'}},
+  // 玩家：PNG 缺失时的色块兜底（绿袍呼应地图上的商人精灵）
+  player:{name:'你',skin:'#f0c8a0',hair:'#6b4a32',cloth:'#6f8f4a',acc:'#8a5a3a',eye:'#3f2b1e',
+    normal:{mouth:'flat'},flat:{mouth:'flat'},angry:{mouth:'frown'},happy:{mouth:'smile'},smile:{mouth:'smile'}}
+};
+// 台词里的称呼 → 立绘 id（邻居剧情字幕用）
+var PORTRAIT_BY_NAME={'小女孩':'girl','哥哥':'xiaoyu','爸爸':'dad','奶奶':'grandma'};
+// 当前该用哪张表情：悲剧结局时小女孩哭、奶奶冷眼，其余一律 normal
+function portraitMoodFor(id){
+  if(state.endingType==='tragic'){
+    if(id==='girl')return 'cry';
+    if(id==='grandma')return 'cold';
+    if(id==='dad')return 'sad';
+    if(id==='xiaoyu')return 'sad';
+  }
+  return 'normal';
+}
+function portraitDef(id,mood){
+  var d=PORTRAITS[id];if(!d)return null;
+  var out={name:d.name,skin:d.skin,hair:d.hair,cloth:d.cloth,acc:d.acc,eye:d.eye,mouth:'flat'};
+  var ov=d[mood]||d.normal||{};
+  for(var k in ov)if(ov.hasOwnProperty(k))out[k]=ov[k];
+  return out;
+}
+// 色块占位立绘：头 + 头发 + 五官 + 衣服，按表情换眼/嘴/泪
+function drawPortraitBlocks(def,x,y,w,h,mood){
+  var cx=x+w/2;
+  ctx.fillStyle=def.cloth;                                  // 身体
+  roundRect(ctx,x+w*0.16,y+h*0.62,w*0.68,h*0.40,12);ctx.fill();
+  ctx.fillStyle=def.skin;                                   // 脖子
+  ctx.fillRect(cx-w*0.07,y+h*0.52,w*0.14,h*0.14);
+  var hw=w*0.56,hh=hw*1.04,hx=cx-hw/2,hy=y+h*0.08;
+  ctx.fillStyle=def.skin;                                   // 头
+  roundRect(ctx,hx,hy,hw,hh,14);ctx.fill();
+  ctx.fillStyle=def.hair;                                   // 头发
+  roundRect(ctx,hx-hw*0.06,hy-hh*0.10,hw*1.12,hh*0.40,12);ctx.fill();
+  var ey=hy+hh*0.50,ex1=cx-hw*0.24,ex2=cx+hw*0.24,my=hy+hh*0.74;
+  ctx.fillStyle=(mood==='cold')?'#2a2a34':def.eye;
+  if(mood==='cry'){                                         // 闭眼
+    ctx.fillRect(ex1-hw*0.09,ey,hw*0.18,hw*0.06);
+    ctx.fillRect(ex2-hw*0.09,ey,hw*0.18,hw*0.06);
+  }else if(mood==='cold'){                                  // 眯眼 + 皱眉
+    ctx.fillRect(ex1-hw*0.10,ey,hw*0.20,hw*0.055);
+    ctx.fillRect(ex2-hw*0.10,ey,hw*0.20,hw*0.055);
+    ctx.fillRect(ex1-hw*0.11,ey-hw*0.11,hw*0.22,hw*0.045);
+    ctx.fillRect(ex2-hw*0.11,ey-hw*0.11,hw*0.22,hw*0.045);
+  }else{                                                    // 圆眼
+    ctx.fillRect(ex1-hw*0.055,ey-hw*0.055,hw*0.11,hw*0.11);
+    ctx.fillRect(ex2-hw*0.055,ey-hw*0.055,hw*0.11,hw*0.11);
+  }
+  ctx.fillStyle='#8a4a40';                                  // 嘴
+  if(mood==='cold')ctx.fillRect(cx-hw*0.14,my,hw*0.28,hw*0.035);
+  else if(mood==='cry'){roundRect(ctx,cx-hw*0.10,my+hw*0.04,hw*0.20,hw*0.05,3);ctx.fill()}
+  else if(def.mouth==='smile'){roundRect(ctx,cx-hw*0.14,my-hw*0.05,hw*0.28,hw*0.09,4);ctx.fill()}
+  else {roundRect(ctx,cx-hw*0.11,my-hw*0.02,hw*0.22,hw*0.05,3);ctx.fill()}
+  if(mood==='cry'){                                         // 眼泪
+    ctx.fillStyle='rgba(120,200,255,0.9)';
+    roundRect(ctx,ex1-hw*0.045,ey+hw*0.08,hw*0.09,hw*0.22,4);ctx.fill();
+    roundRect(ctx,ex2-hw*0.045,ey+hw*0.14,hw*0.09,hw*0.22,4);ctx.fill();
+  }
+  ctx.fillStyle=def.acc;                                    // 领口
+  roundRect(ctx,cx-w*0.10,y+h*0.62,w*0.20,h*0.05,3);ctx.fill();
+}
+// 有 PNG 就画 PNG，没有就画色块占位（对话面板与过场 CG 共用这一处判断）
+function drawPortraitArt(id,mood,x,y,w,h){
+  var img=PORTRAIT_IMAGES[id+'_'+mood];
+  if(img&&img.complete&&img.naturalWidth>0){
+    // 等比缩放居中（contain）：素材什么长宽比都不会被拉变形
+    var sc=Math.min(w/img.naturalWidth,h/img.naturalHeight);
+    var dw=img.naturalWidth*sc,dh=img.naturalHeight*sc;
+    ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+  }
+  else drawPortraitBlocks(portraitDef(id,mood),x,y,w,h,mood);
+}
+// 画立绘：底边贴在 bottomY，高 h、宽 w。背景完全透明——不画面板底、不画边框、不画名字条
+// （说话人名字由对话框/字幕框自己显示），人物直接浮在场景上，能看到后面的东西
+function drawPortrait(id,bottomY,w,h){
+  var def=PORTRAITS[id];if(!def)return;
+  var mood=portraitMoodFor(id);
+  if(!def[mood])mood='normal';
+  drawPortraitArt(id,mood,W-60-w,bottomY-h,w,h);
+}
+// 对话双立绘：玩家固定左侧、NPC 固定右侧，底边对齐对话框顶边；谁说话谁全亮，另一方压到 0.45
+function drawDialogPortrait(d){
+  var speaking=d.playerSpeaking;                 // true = 玩家正在说话
+  var pw=190,ph=240,by=H-176-34;
+  ctx.globalAlpha=speaking?1:0.45;               // 玩家：说话用张嘴的 normal，聆听用平静的 flat
+  drawPortraitArt('player',speaking?'normal':'flat',60,by-ph,pw,ph);
+  if(d.npc&&PORTRAITS[d.npc.id]){                // NPC：表情走 portraitMoodFor（悲剧结局自动 sad/cry/cold）
+    ctx.globalAlpha=speaking?0.45:1;
+    drawPortraitArt(d.npc.id,portraitMoodFor(d.npc.id),W-60-pw,by-ph,pw,ph);
+  }
+  ctx.globalAlpha=1;
+}
+// 邻居剧情字幕立绘：挂在字幕框正上方，按当前说话人切换
+function drawStoryPortrait(s){
+  var cur=s.lines[s.index];if(!cur)return;
+  var id=PORTRAIT_BY_NAME[cur.who];if(!id)return;
+  drawPortrait(id,H-150,190,240);
+}
+/* 邻居强制剧情字幕框（与对话系统无关，独立绘制） */
+function drawStoryBox(){
+  var s=state.story;if(!s)return;
+  var cur=s.lines[s.index]||{who:'',text:''};
+  var shown=cur.text.slice(0,s.charIndex);
+  var finished=(s.charIndex>=cur.text.length);
+  var last=(s.index===s.lines.length-1);
+  drawStoryPortrait(s);
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.62)';ctx.fillRect(0,H-150,W,150);
+  ctx.fillStyle='rgba(10,10,20,0.88)';
+  roundRect(ctx,80,H-136,W-160,112,14);ctx.fill();
+  ctx.strokeStyle='rgba(255,215,0,0.45)';ctx.lineWidth=2;
+  roundRect(ctx,80,H-136,W-160,112,14);ctx.stroke();
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.font='bold 18px "Microsoft YaHei"';ctx.fillStyle='#ffd700';
+  ctx.fillText(cur.who,106,H-108);
+  ctx.font='20px "Microsoft YaHei"';ctx.fillStyle='#fff';
+  ctx.fillText(shown,106,H-72);
+  if(finished){
+    ctx.font='bold 15px "Microsoft YaHei"';ctx.fillStyle='rgba(255,215,0,0.8)';
+    ctx.textAlign='right';
+    ctx.fillText(last?(isTouch?'点击结束 ▸':'（按 [空格] 继续赶路）')
+                     :(isTouch?'点击继续 ▸':'（按 [空格] 继续）'),W-104,H-42);
+  }
+  ctx.restore();
+}
+function drawDialogBox(){
+  var d=state.dialog;if(!d)return;
+  var boxH=176,boxY=H-boxH-34;
+  ctx.fillStyle='rgba(6,6,16,0.94)';
+  roundRect(ctx,60,boxY,W-120,boxH,16);ctx.fill();
+  ctx.strokeStyle='#ffd700';ctx.lineWidth=3;
+  roundRect(ctx,60,boxY,W-120,boxH,16);ctx.stroke();
+  drawDialogPortrait(d);
+  if(d.npc&&!d.playerSpeaking){   // 好感度是 NPC 的状态，玩家说话时先让位给玩家台词
+    // 好感度：横条 + 具体数值（-10 ~ +10），砍价时好感越高越容易砍
+    var trust=clamp(d.npc.trust,-10,10);
+    var tbW=110,tbH=10,tbX=W-96-tbW,tbY=boxY+26;
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.font='13px "Microsoft YaHei"';ctx.fillStyle='#ffd700';
+    ctx.fillText('好感 '+(trust>0?'+':'')+trust,tbX-52,tbY+tbH/2);
+    ctx.fillStyle='rgba(255,255,255,0.14)';
+    roundRect(ctx,tbX,tbY,tbW,tbH,5);ctx.fill();
+    var pct=(trust+10)/20;
+    ctx.fillStyle=trust>=0?'#ffd700':'#ff6b6b';
+    roundRect(ctx,tbX+tbW/2,tbY,Math.max(2,Math.abs(pct-0.5)*tbW),tbH,5);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.75)';
+    ctx.fillRect(tbX+tbW/2-1,tbY-3,2,tbH+6);
+  }
+  ctx.font='bold 24px "Microsoft YaHei"';
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#ffd700';
+  ctx.fillText(d.speaker,96,boxY+22);
+  var full=d.lines[d.index]||'';
+  var shown=full.slice(0,d.charIndex);
+  ctx.font='22px "Microsoft YaHei"';ctx.fillStyle='#e8e8f0';
+  wrapText(shown,96,boxY+70,W-210,34);
+  d.optionRects=[];
+  if(!d.waitingForAI&&d.options&&d.options.length&&d.charIndex>=full.length){
+    var rects=computeOptionRects(d.options.length);
+    d.optionRects=rects;
+    for(var j=0;j<rects.length;j++){
+      var r=rects[j];
+      var isTradeOpt=(d.options[j]==='买东西'||d.options[j]==='卖东西');
+      ctx.fillStyle='rgba(20,24,44,0.92)';
+      roundRect(ctx,r.x,r.y,r.w,r.h,10);ctx.fill();
+      ctx.strokeStyle=isTradeOpt?'rgba(255,215,0,0.85)':'rgba(150,200,255,0.5)';ctx.lineWidth=2;
+      roundRect(ctx,r.x,r.y,r.w,r.h,10);ctx.stroke();
+      ctx.fillStyle=isTradeOpt?'#ffd700':'#d6ecff';ctx.font='18px "Microsoft YaHei"';
+      ctx.textAlign='left';ctx.textBaseline='middle';
+      ctx.fillText('['+(j+1)+'] '+d.options[j],r.x+16,r.y+r.h/2);
+    }
+  }else if(d.charIndex>=full.length&&!d.waitingForAI&&!state.haggleMode&&!state.shop){
+    var blink=(Math.sin(state.time*7)+1)/2;
+    ctx.globalAlpha=0.35+blink*0.65;
+    ctx.font='bold 16px "Microsoft YaHei"';ctx.fillStyle='#ffd700';
+    ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.fillText(isTouch?'点击屏幕继续 ▸':'按 [空格] 继续 ▸',W-96,boxY+boxH-26);
+    ctx.globalAlpha=1;
+  }
+  if(d.waitingForAI){
+    var dots='';
+    for(var k=0;k<1+(Math.floor(state.time*2)%3);k++)dots+='.';
+    ctx.font='16px "Microsoft YaHei"';ctx.fillStyle='rgba(200,220,255,0.6)';
+    ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.fillText('思考中'+dots,W-96,boxY+boxH-26);
+  }
+}
+function computeOptionRects(count){
+  if(!count)return [];
+  var boxY=H-176-34,optH=44,gap=6;
+  var totalH=count*optH+(count-1)*gap;
+  var startY=boxY-14-totalH;
+  var out=[];
+  for(var i=0;i<count;i++){
+    // 选项区右移到 300..700：避开左侧玩家立绘(60..250)与右侧 NPC 立绘(710..900)，两侧立绘都完整露出
+    out.push({x:300,y:startY+i*(optH+gap),w:400,h:optH,idx:i});
+  }
+  return out;
+}
+function drawTouchControls(){
+  if(!isTouch)return;
+  var m=state.mode;
+  if(m==='play'){
+    var j=touchState.joystick;
+    if(j.active){
+      ctx.save();ctx.globalAlpha=0.85;
+      ctx.beginPath();ctx.arc(j.ox,j.oy,JOY_MAX,0,6.283);
+      ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fill();
+      ctx.strokeStyle='rgba(160,210,255,0.4)';ctx.lineWidth=3;ctx.stroke();
+      ctx.beginPath();ctx.arc(j.ox+j.dx*JOY_MAX,j.oy+j.dy*JOY_MAX,30,0,6.283);
+      var g=ctx.createRadialGradient(
+        j.ox+j.dx*JOY_MAX,j.oy+j.dy*JOY_MAX,4,
+        j.ox+j.dx*JOY_MAX,j.oy+j.dy*JOY_MAX,30);
+      g.addColorStop(0,'rgba(180,230,255,0.85)');
+      g.addColorStop(1,'rgba(90,160,230,0.55)');
+      ctx.fillStyle=g;ctx.fill();ctx.restore();
+    }
+    drawCircleBtn(BTN_E,'E','互动');
+    drawCircleBtn(BTN_SPACE,'✓','确认');
+  }else if(m==='dialog'||m==='cutscene'){
+    drawBigHint('点击屏幕继续 ▸');
+  }else if(m==='victory'||m==='dead'){
+    drawBigHint('点击屏幕重新开始 ↻');
+  }
+}
+function drawCircleBtn(b,label,sub){
+  ctx.save();ctx.globalAlpha=0.82;
+  ctx.beginPath();ctx.arc(b.cx,b.cy,b.r,0,6.283);
+  ctx.fillStyle='rgba(16,26,44,0.6)';ctx.fill();
+  ctx.strokeStyle='rgba(150,210,255,0.65)';ctx.lineWidth=3;ctx.stroke();
+  ctx.globalAlpha=1;ctx.fillStyle='#d6ecff';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold '+Math.floor(b.r*0.72)+'px "Microsoft YaHei"';
+  ctx.fillText(label,b.cx,b.cy-(sub?b.r*0.12:0));
+  if(sub){
+    ctx.font=Math.floor(b.r*0.38)+'px "Microsoft YaHei"';
+    ctx.fillStyle='rgba(200,225,255,0.8)';
+    ctx.fillText(sub,b.cx,b.cy+b.r*0.5);
+  }
+  ctx.restore();
+}
+function drawBigHint(text){
+  ctx.save();
+  ctx.font='bold 22px "Microsoft YaHei"';
+  var w=ctx.measureText(text).width+60;
+  var x=W/2-w/2,y=H-96;
+  var blink=0.55+Math.sin(state.time*3)*0.25;
+  ctx.globalAlpha=blink;
+  ctx.fillStyle='rgba(8,8,18,0.8)';
+  roundRect(ctx,x,y,w,56,28);ctx.fill();
+  ctx.strokeStyle='#ffd700';ctx.lineWidth=2;
+  roundRect(ctx,x,y,w,56,28);ctx.stroke();
+  ctx.globalAlpha=1;ctx.fillStyle='#ffd700';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(text,W/2,y+29);
+  ctx.restore();
+}
+function drawVictory(){
+  ctx.fillStyle='#05020a';ctx.fillRect(0,0,W,H);
+  var cx=W/2,cy=250;
+  var r=240+Math.sin(state.time*2)*30;
+  var grd=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+  grd.addColorStop(0,'rgba(255,215,0,0.4)');
+  grd.addColorStop(0.5,'rgba(255,180,0,0.15)');
+  grd.addColorStop(1,'rgba(255,215,0,0)');
+  ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+  particles.draw(ctx);
+  var t=state.time,scale=1+Math.sin(t*3)*0.05;
+  ctx.save();ctx.translate(W/2,220);ctx.scale(scale,scale);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowColor='#ffd700';ctx.shadowBlur=60;
+  ctx.font='bold 108px "Microsoft YaHei"';
+  var grad=ctx.createLinearGradient(0,-70,0,70);
+  grad.addColorStop(0,'#fffbe0');
+  grad.addColorStop(0.45,'#ffd700');
+  grad.addColorStop(1,'#a87400');
+  ctx.fillStyle=grad;ctx.fillText('胜 利 结 算',0,0);
+  ctx.restore();
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 30px "Microsoft YaHei"';
+  if(state.endingType==='happy'){
+    ctx.fillStyle='#7bd7ff';ctx.shadowColor='#7bd7ff';ctx.shadowBlur=30;
+    ctx.fillText('✨ 美满的结局 ✨',W/2,310);
+  }else{
+    ctx.fillStyle='#ff5252';ctx.shadowColor='#ff5252';ctx.shadowBlur=30;
+    ctx.fillText('💀 悲剧的结局 💀',W/2,310);
+  }
+  ctx.restore();
+  var tragic=(state.endingType==='tragic');
+  if(tragic){                                   // 夸张结算：把"胜利"说得越响，越难听
+    ctx.font='bold 19px "Microsoft YaHei"';
+    ctx.fillStyle='rgba(255,140,140,0.92)';
+    ctx.shadowColor='rgba(255,60,60,0.7)';ctx.shadowBlur=12;
+    ctx.fillText('🏆 你赢了。用爸爸和哥哥两条命，换了 '+state.money+' 枚金币。',W/2,338);
+    ctx.shadowBlur=0;
+  }
+  var boxY=368;
+  ctx.fillStyle='rgba(10,10,20,0.85)';
+  roundRect(ctx,W/2-300,boxY,600,170,16);ctx.fill();
+  ctx.strokeStyle='#ffd700';ctx.lineWidth=3;
+  roundRect(ctx,W/2-300,boxY,600,170,16);ctx.stroke();
+  ctx.font='bold 24px "Microsoft YaHei"';
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillStyle='#ffd700';
+  ctx.fillText('💰  总金币',W/2-260,boxY+40);
+  ctx.fillText(tragic?'🩹  省下的安全费':'😇  诚实劳动',W/2-260,boxY+85);
+  ctx.fillText(tragic?'⚰️  用命换来的钱':'😈  快钱次数',W/2-260,boxY+130);
+  ctx.textAlign='right';ctx.fillStyle='#fff';
+  ctx.fillText(String(state.money),W/2+260,boxY+40);
+  ctx.fillStyle=tragic?'#ff9f43':'#7bd7ff';
+  ctx.fillText(tragic?'全 部 省 下':(state.honest+' 次'),W/2+260,boxY+85);
+  ctx.fillStyle='#ff5252';
+  ctx.fillText(tragic?('+'+(state.greed*1000)+' 金币'):(state.greed+' 次'),W/2+260,boxY+130);
+  ctx.font='18px "Microsoft YaHei"';
+  ctx.fillStyle='rgba(255,215,0,0.55)';ctx.textAlign='center';
+  ctx.fillText(isTouch?'点击屏幕重新开始':'按 [R] 重新开始',W/2,H-32);
+}
+function drawDeadScreen(){
+  ctx.fillStyle='#0a0000';ctx.fillRect(0,0,W,H);
+  var g=ctx.createRadialGradient(W/2,H/2,60,W/2,H/2,500);
+  g.addColorStop(0,'rgba(120,0,0,0.5)');g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 90px "Microsoft YaHei"';
+  ctx.fillStyle='#c0392b';ctx.shadowColor='#ff0000';ctx.shadowBlur=40;
+  ctx.fillText('精 尽 人 亡',W/2,H/2-60);ctx.shadowBlur=0;
+  ctx.font='22px "Microsoft YaHei"';ctx.fillStyle='rgba(220,200,200,0.7)';
+  ctx.fillText('你倒在了半路上。',W/2,H/2+30);
+  ctx.fillText('下次记得回家睡一觉。',W/2,H/2+66);
+  ctx.font='18px "Microsoft YaHei"';ctx.fillStyle='rgba(255,215,0,0.55)';
+  ctx.fillText(isTouch?'点击屏幕重新开始':'按 [R] 重新开始',W/2,H-70);
+}
+function render(dt){
+  ctx.clearRect(0,0,W,H);
+  if(state.mode==='intro'){camera.begin();drawScene();camera.end();return}
+  if(state.mode==='cutscene'){drawCutscene();drawSceneTransition();return}
+  if(state.mode==='victory'){drawVictory();return}
+  if(state.mode==='dead'){drawDeadScreen();return}
+  camera.begin();
+  drawScene();
+  drawPlayerSprite();
+  particles.draw(ctx);
+  drawFloats();
+  camera.end();
+  drawTouchControls();
+  drawHUD();
+  if(debugColliders)drawDebugLegend();
+  if(state.mode==='play')drawInteractPrompt();
+  if(state.mode==='dialog')drawDialogBox();
+  if(state.story)drawStoryBox();
+  if(state.showBag)drawBagPopup();
+  drawSceneTransition();
+}
+
+function drawBagPopup(){
+  ctx.fillStyle='rgba(0,0,0,0.62)';ctx.fillRect(0,0,W,H);
+  var pw=620,ph=444,px=(W-pw)/2,py=(H-ph)/2;
+  ctx.fillStyle='rgba(10,12,26,0.97)';
+  roundRect(ctx,px,py,pw,ph,18);ctx.fill();
+  ctx.strokeStyle='#ffd700';ctx.lineWidth=3;
+  roundRect(ctx,px,py,pw,ph,18);ctx.stroke();
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.font='bold 24px "Microsoft YaHei"';ctx.fillStyle='#ffd700';
+  ctx.fillText('🎒 背包',px+28,py+38);
+  ctx.font='13px "Microsoft YaHei"';ctx.fillStyle='rgba(200,210,240,0.55)';
+  ctx.textAlign='right';
+  ctx.fillText(isTouch?'点击任意处关闭':'按 B / Esc 关闭 · 按 1 吃糖',px+pw-28,py+38);
+  var bagDef=[['brick','🧱','砖头'],['cement','🧰','水泥'],
+              ['helmet','⛑️','安全帽'],['scaffold','🪜','手脚架'],
+              ['candy','🍬','橘子糖'],['cigarette','🚬','香烟'],
+              ['wine','🍶','白酒']];
+  var rowY=py+94,rowH=62,colW=(pw-56)/2;
+  for(var i=0;i<bagDef.length;i++){
+    var k=bagDef[i][0],ic=bagDef[i][1],nm=bagDef[i][2],n=state.bag[k]||0;
+    var col=i%2,row=Math.floor(i/2);
+    var bx=px+24+col*(colW+8),by=rowY+row*rowH-24;
+    ctx.fillStyle='rgba(255,255,255,0.05)';
+    roundRect(ctx,bx,by,colW-6,rowH-10,10);ctx.fill();
+    ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='26px "Microsoft YaHei"';
+    ctx.fillStyle='#fff';ctx.fillText(ic,bx+18,by+(rowH-10)/2);
+    ctx.font='18px "Microsoft YaHei"';ctx.fillStyle=n>0?'#e8e8f0':'rgba(200,210,240,0.35)';
+    ctx.fillText(nm,bx+58,by+(rowH-10)/2);
+    ctx.textAlign='right';ctx.font='bold 19px "Microsoft YaHei"';
+    ctx.fillStyle=n>0?'#ffd700':'rgba(200,210,240,0.35)';
+    ctx.fillText('× '+n,bx+colW-26,by+(rowH-10)/2);
+  }
+  ctx.textAlign='left';ctx.font='15px "Microsoft YaHei"';ctx.fillStyle='rgba(200,210,240,0.7)';
+  ctx.fillText('金币 '+Math.round(state.displayMoney)+' / '+GOAL,px+28,py+ph-58);
+  ctx.textAlign='right';
+  ctx.fillText('爽快成交 '+state.honest+' 次 · 磨价成功 '+state.greed+' 次',px+pw-28,py+ph-58);
+  ctx.textAlign='left';ctx.font='13px "Microsoft YaHei"';ctx.fillStyle='rgba(200,210,240,0.45)';
+  ctx.fillText('糖可以吃或送小女孩 · 烟酒送成年男性 · 建材卖给工人和校长。磨价太狠会走向悲剧结局。',px+28,py+ph-28);
+}
+
+/* ============ §20 主循环 ============ */
+var lastTime=performance.now();
+function loop(now){
+  var dt=Math.min((now-lastTime)/1000,0.05);
+  lastTime=now;
+  try{update(dt);render(dt)}catch(e){console.error(e)}
+  requestAnimationFrame(loop);
+}
+/* ============ §21 开局：角色创建 + 云端/本地模型选择 ============ */
+(function initStart(){
+  var LS_KEY=CLOUD_LS_KEY;
+  var ss=document.getElementById('startScreen');
+  var pname=document.getElementById('pname');
+  var cBase=document.getElementById('cBase'),cKey=document.getElementById('cKey'),cModel=document.getElementById('cModel');
+  var gender='male',cloudChoice='no';
+  var savedCloudError='';
+  // 恢复上次填过的配置
+  try{
+    var saved=JSON.parse(localStorage.getItem(LS_KEY)||'null');
+    if(saved){
+      if(saved.name)pname.value=saved.name;
+      if(saved.gender)gender=saved.gender;
+      if(saved.baseUrl)cBase.value=saved.baseUrl;
+      if(saved.apiKey)cKey.value=saved.apiKey;
+      if(saved.model)cModel.value=saved.model;
+      if(saved.lastError)savedCloudError=String(saved.lastError);
+    }
+  }catch(e){}
+  function syncGender(){
+    var bs=document.querySelectorAll('#genderSeg button');
+    for(var i=0;i<bs.length;i++)bs[i].classList.toggle('on',bs[i].getAttribute('data-g')===gender);
+  }
+  function syncCloud(){
+    var bs=document.querySelectorAll('#cloudSeg button');
+    for(var i=0;i<bs.length;i++)bs[i].classList.toggle('on',bs[i].getAttribute('data-c')===cloudChoice);
+    document.getElementById('cloudFields').classList.toggle('show',cloudChoice==='yes');
+  }
+  function syncModel(){
+    var cur=(cModel.value||'').trim();
+    var bs=document.querySelectorAll('#modelSeg button');
+    for(var i=0;i<bs.length;i++)bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===cur);
+  }
+  function pick(segId,attr,setter){
+    document.getElementById(segId).addEventListener('click',function(e){
+      var b=e.target&&e.target.closest?e.target.closest('button'):null;
+      if(!b)return;setter(b.getAttribute(attr));
+    });
+  }
+  syncGender();syncCloud();syncModel();
+  pick('genderSeg','data-g',function(v){gender=v;syncGender()});
+  pick('cloudSeg','data-c',function(v){cloudChoice=v;syncCloud()});
+  pick('modelSeg','data-m',function(v){cModel.value=v;syncModel()});
+  cModel.addEventListener('input',syncModel);
+
+  // ---- 「测试云端连接」：把结果直接显示在页面上，不用去翻 F12 控制台 ----
+  var testBtn=document.getElementById('testBtn'),testResult=document.getElementById('testResult');
+  function showTest(cls,msg){
+    testResult.className='show '+cls;
+    testResult.textContent=msg;
+  }
+  testBtn.addEventListener('click',function(){
+    var base=(cBase.value||'').trim().replace(/\/+$/,'');
+    var key=(cKey.value||'').trim();
+    var model=(cModel.value||'').trim();
+    if(location.protocol==='file:'){
+      showTest('bad','❌ 当前页面是 file:// 直接打开的，没有后端代理，云端必定连不上。\n'+
+        '请关掉这个页面，改用「启动游戏.bat」或访问 http://127.0.0.1:8000/ourgame7.html');
+      return;
+    }
+    if(!base){showTest('bad','❌ Base URL 是空的。DeepSeek 请填 https://api.deepseek.com/v1');return}
+    if(!model){showTest('bad','❌ 模型名是空的。点上面的按钮选 DeepSeek Chat / DeepSeek V4.1 Flash / DeepSeek R1');return}
+    testBtn.disabled=true;
+    showTest('wait','⏳ 正在测试连接…\n'+base+'  ·  '+model+'\n（最多等 30 秒）');
+    var t0=Date.now();
+    fetch('/api/chat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        npcId:'_cloudtest',profile:{role:'测试',persona:'',trade:{}},
+        player:{money:0,energy:100,bag:{},trust:0},trust:0,recentEvents:[],history:[],
+        playerInput:'你好',cloudTest:true,
+        cloud:{baseUrl:base,apiKey:key,model:model}
+      })
+    }).then(function(r){
+      return r.text().then(function(t){
+        testBtn.disabled=false;
+        var d=null;try{d=JSON.parse(t)}catch(e){}
+        var c=d&&d.cloud,ms=Date.now()-t0;
+        if(c&&c.ok){
+          showTest('ok','✅ 连接成功（'+ms+'ms）\n实际地址：'+(c.url||base)+
+            '\n模型已回话：'+String(d.reply||'').slice(0,40)+'\n可以放心开始游戏了。');
+        }else if(c&&c.error){
+          showTest('bad','❌ 连接失败（'+ms+'ms）：'+c.error+
+            '\n\n请对照检查：① API Key 是否正确（sk- 开头，有没有多余空格）'+
+            '② Base URL 是否是 https://api.deepseek.com/v1 ③ 模型名是否是 deepseek-flash / deepseek-chat / deepseek-reasoner');
+        }else{
+          showTest('bad','❌ 连接失败（'+ms+'ms）：'+((d&&d.error)?d.error:'响应异常：'+String(t).slice(0,200)));
+        }
+      });
+    }).catch(function(err){
+      testBtn.disabled=false;
+      showTest('bad','❌ 连本机代理都没连上：'+(err&&err.message)+
+        '\n请确认「启动游戏.bat」那个黑窗口还开着（监听 8000 端口），然后刷新页面重试。');
+    });
+  });
+
+  // 上次玩的时候云端失败过 → 开局页直接把原因摆出来，省得再猜
+  if(savedCloudError){
+    showTest('bad','上次云端连接失败：'+savedCloudError+
+      '\n可以点上面的「测试云端连接」再试一次，或改回本地模型。');
+  }
+
+  function start(){
+    var nm=(pname.value||'').trim().slice(0,8)||'小明';
+    state.playerName=nm;
+    state.gender=gender;
+    state.cloud.enabled=(cloudChoice==='yes'&&!!(cBase.value||'').trim());
+    state.cloud.baseUrl=(cBase.value||'').trim().replace(/\/+$/,'');
+    state.cloud.apiKey=(cKey.value||'').trim();
+    state.cloud.model=(cModel.value||'').trim();
+    // 开局先把云端配置检查一遍并打到控制台：缺什么一眼就看得出来（之前"选了云端却没生效"就是这里漏了提示）
+    state.cloud.ok=true;state.cloud.lastError='';state.cloud.url='';state.cloud.coolUntil=0;
+    if(cloudChoice==='yes'){
+      if(!state.cloud.baseUrl)_netErr('选了「云端API」但 Base URL 是空的 → 已自动回退本地模型',
+        '请填成 https://api.deepseek.com/v1 这种带 /v1 的地址');
+      else if(!state.cloud.model)_netErr('选了「云端API」但模型名是空的 → 服务端会报「缺少模型名」',
+        '请填如 deepseek-flash / deepseek-chat / qwen-plus / gpt-4o-mini');
+      else if(!state.cloud.apiKey)_netLog('提示：API Key 为空，多数服务商需要 Key，否则会返回 401',state.cloud.baseUrl);
+      else _netLog('云端配置已就绪',{baseUrl:state.cloud.baseUrl,model:state.cloud.model,
+        apiKey:_maskKey(state.cloud.apiKey)});
+    }
+    try{localStorage.setItem(LS_KEY,JSON.stringify({name:nm,gender:gender,
+      baseUrl:state.cloud.baseUrl,apiKey:state.cloud.apiKey,model:state.cloud.model}))}catch(e){}
+    ss.classList.add('hidden');
+    gameStarted=true;
+    state.mode='play';
+    bgmSync();   // 借「开始游戏」这次点击的手势把音乐起播（浏览器自动播放策略要求先有用户手势）
+    camera.snap();
+    addFloat('欢迎，'+nm+'！',player.x+player.w/2,player.y-20,'#ffd700');
+    addFloat(state.cloud.enabled?'☁️ 云端模型':'💻 本地模型',player.x+player.w/2,player.y-44,
+      state.cloud.enabled?'#7bd7ff':'#a8c6ff');
+  }
+  document.getElementById('startBtn').addEventListener('click',start);
+  pname.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault();start()}
+  });
+})();
+
+// 预热 Ollama 模型，避免第一次对话等待 10-30 秒
+(function warmUp(){
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      npcId:'_warmup', player:{money:0,energy:100,bag:{brick:0,cement:0,helmet:0,candy:0},goal:100000},
+      trust:0, recentEvents:[], history:[], playerInput:null
+    })
+  }).then(function(r){ return r.json(); })
+    .then(function(){ console.log('[预热] Ollama 模型已加载'); })
+    .catch(function(){ console.log('[预热] 跳过（Ollama 未就绪）'); });
+})();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
